@@ -18,7 +18,7 @@ The repository is mid-transformation:
 - **Legacy** (`src/main.py`): a Python CLI script that reads a CSV of drivers/riders, geocodes
   addresses with Nominatim, builds a scipy distance matrix, and writes matched carpools to a
   CSV. Dependencies: `pandas`, `geopy`, `scipy`. Tests in `test/` are `unittest`-based stubs.
-- **Target** (per `doc/functional_requirements_and_architecture.md` v2): a full-stack web app —
+- **Target** (per `docs/functional_requirements_and_architecture.md` v2): a full-stack web app —
   FastAPI + Mangum on AWS Lambda ARM64, Next.js (App Router) on Cloudflare Pages, DynamoDB
   single-table, Google OIDC, Nominatim (geocode) + self-hosted OSRM (matrix/route), and a
   greedy matching MVP that reuses the legacy `src/main.py` logic relocated into
@@ -33,14 +33,14 @@ The build-out is phased: **Phase 1 Discovery → Phase 6 Hardening** (see `plans
 | Area | State |
 | --- | --- |
 | Legacy CLI | Present in `src/main.py`; superseded by the platform build but retained as the matching-algorithm reference. |
-| Phase 1 — Discovery | **Active.** Producing design artifacts (requirements baseline, RBAC matrix, workflow diagrams, ERD, API contracts, wireframes) in `doc/`. No production code ships this phase. |
+| Phase 1 — Discovery | **Active.** Producing design artifacts (requirements baseline, RBAC matrix, workflow diagrams, ERD, API contracts, wireframes) in `docs/`. No production code ships this phase. |
 | Phase 2 — Foundation | Planned. FastAPI skeleton, Google OIDC, session CRUD, RBAC middleware, rate limiting, DynamoDB schema, Next.js bootstrap. |
 | Phase 3 — Registration | Planned. Registration workflow, maps integration, driver/passenger UI. |
 | Phase 4 — Matching Engine | Planned. Route matrix, scoring, optimization (CVRPTW), admin override. Most complex phase. |
 | Phase 5 — Approval & Notification | Planned. Approval workflow, email via SQS → email Lambda → M365 Exchange, audit logging. |
 | Phase 6 — Hardening | Planned. Load testing, security review, observability, production readiness. |
 | CI | Legacy: `.github/workflows/{pylint,unittest}.yml` on Python 3.8–3.10. Target: ruff + mypy + pytest + Lambda/Pages deploy pipelines (Phase 2). |
-| Repo layout | `src/` (legacy), `test/` (legacy), `mock/` (CSV fixtures), `doc/` (requirements + architecture), `plans/` (phase plans), `.github/workflows/`. Target layout adds `app/` (backend) and a frontend project. |
+| Repo layout | `src/` (legacy), `test/` (legacy), `mock/` (CSV fixtures), `docs/` (requirements + architecture), `plans/` (phase plans), `.github/workflows/`. Target layout adds `app/` (backend) and a frontend project. |
 
 ---
 
@@ -125,7 +125,7 @@ npm test                                  # unit/integration (TBD)
    - **Project-local:** `.kilo/skills/`, `.kilo/agent/`, `.kilo/command/`. Project-local overrides win.
    - The `kilo-config` skill for this project is loaded from a project-local `builtin` location.
 4. **Specs before code.** Non-trivial features require a spec (use `spec-driven-development`)
-   before implementation. The `doc/functional_requirements_and_architecture.md` is the master
+   before implementation. The `docs/functional_requirements_and_architecture.md` is the master
    spec; phase plans decompose it.
 5. **Tests before code.** Follow `test-driven-development`. No logic lands without a failing
    test first.
@@ -142,12 +142,12 @@ npm test                                  # unit/integration (TBD)
 ## 6. Agent Observability & Rationale Requirements
 
 Every agent must leave a visible rationale trail so decisions are traceable, reviewable, and
-auditable. Record rationale in the PR description, commit messages, `doc/adr/` (ADRs), and
+auditable. Record rationale in the PR description, commit messages, `docs/adr/` (ADRs), and
 `KNOWLEDGE.md`.
 
 | Agent Role | Must Document |
 | --- | --- |
-| **Analyst** | Clarified requirements, resolved ambiguities, accepted/deferred FRs (update `doc/requirements_baseline.md`). |
+| **Analyst** | Clarified requirements, resolved ambiguities, accepted/deferred FRs (update `docs/requirements_baseline.md`). |
 | **System Architect** | Technology choices, trade-offs, data-model decisions, GSI design, service boundaries. ADR required for any non-trivial architecture decision. |
 | **Programmer** | What was implemented, which spec/FR it satisfies, tests added, deviations from plan and why. |
 | **Reviewer** | Findings by axis (correctness, security, performance, maintainability), severity, and required fixes. |
@@ -157,7 +157,7 @@ auditable. Record rationale in the PR description, commit messages, `doc/adr/` (
 
 **ADR requirement:** Any decision that is hard to reverse or affects external APIs, the data
 model, security posture, or the service architecture requires an Architecture Decision Record in
-`doc/adr/NNNN-title.md` (template: `doc/adr/0000-template.md`). Link the ADR from the PR.
+`docs/adr/NNNN-title.md` (template: `docs/adr/0000-template.md`). Link the ADR from the PR.
 
 ---
 
@@ -204,7 +204,7 @@ High-level phases map to skills as follows:
 
 Agents operate autonomously within the workflow below. Principles:
 
-1. **Analyze** the request against `doc/functional_requirements_and_architecture.md` and the
+1. **Analyze** the request against `docs/functional_requirements_and_architecture.md` and the
    relevant `plans/phase-N-*.md`. Identify which FR and which phase task this satisfies.
 2. **Determine the workflow** using §8 and §10. Pick skills before picking up a text editor.
 3. **Execute** incrementally — small, verifiable steps. Run the verification commands (§15)
@@ -404,11 +404,11 @@ here (e.g., `matching-engine-dev`, `frontend-dev`, `infra-dev`). Place their def
 
 ### Project-Specific References
 *None in `.kilo/skills/` yet.* The project's own reference material lives in:
-- `doc/functional_requirements_and_architecture.md` — master spec (FR-1..FR-11, RBAC, data model, API).
+- `docs/functional_requirements_and_architecture.md` — master spec (FR-1..FR-11, RBAC, data model, API).
 - `plans/phase-{1..6}-*.md` — phased implementation plans.
-- `doc/requirements_baseline.md`, `doc/rbac_matrix.md`, `doc/data_model_erd.md`,
-  `doc/api_contracts.md`, `doc/diagrams/`, `doc/wireframes/` — Phase 1 deliverables (as produced).
-- `doc/adr/` — Architecture Decision Records.
+- `docs/requirements_baseline.md`, `docs/rbac_matrix.md`, `docs/data_model_erd.md`,
+  `docs/api_contracts.md`, `docs/diagrams/`, `docs/wireframes/` — Phase 1 deliverables (as produced).
+- `docs/adr/` — Architecture Decision Records.
 - `KNOWLEDGE.md` — lessons learned (created on first task wrap-up).
 
 ---
@@ -457,8 +457,8 @@ A task is complete only when ALL of the following are true:
 
 - **`KNOWLEDGE.md`** (repo root) — running log of lessons learned, gotchas, and decisions. Update
   in the DOCUMENTATION phase of every task.
-- **`doc/adr/`** — Architecture Decision Records. Filename: `NNNN-short-title.md`. Template:
-  `doc/adr/0000-template.md` (create on first ADR). Every ADR records context, decision,
+- **`docs/adr/`** — Architecture Decision Records. Filename: `NNNN-short-title.md`. Template:
+  `docs/adr/0000-template.md` (create on first ADR). Every ADR records context, decision,
   alternatives considered, and consequences.
 
 ---
@@ -489,7 +489,7 @@ not hardcoded):
 
 ## 19. Contact / Support
 
-- **Architecture & requirements:** [`doc/functional_requirements_and_architecture.md`](doc/functional_requirements_and_architecture.md)
+- **Architecture & requirements:** [`docs/functional_requirements_and_architecture.md`](docs/functional_requirements_and_architecture.md)
 - **Phase plans:** [`plans/`](plans/)
 - **README:** [`README.md`](README.md)
 - **Repository:** https://github.com/timycyip/carpool-coordinator

@@ -1,6 +1,6 @@
 # Phase 1 — Discovery Plan
 
-Plan series derived from `doc/functional_requirements_and_architecture.md`. This phase produces design artifacts and contracts; no production code is shipped.
+Plan series derived from `docs/functional_requirements_and_architecture.md`. This phase produces design artifacts and contracts; no production code is shipped.
 
 ## Open Questions (to refine)
 - [ ] Who owns sign-off on finalized requirements (Product Owner, BA, or both)?
@@ -22,8 +22,8 @@ Convert the v2 requirements doc into implementation-ready artifacts: signed-off 
 ## Tasks (ordered)
 
 ### 1. Requirements baseline sign-off
-- Review `doc/functional_requirements_and_architecture.md` against stakeholder feedback.
-- Produce `doc/requirements_baseline.md`: FR-1..FR-11 with status (Accepted / Clarified / Deferred) and inline clarifications.
+- Review `docs/functional_requirements_and_architecture.md` against stakeholder feedback.
+- Produce `docs/requirements_baseline.md`: FR-1..FR-11 with status (Accepted / Clarified / Deferred) and inline clarifications.
 - Resolve the FR-3 vs FR-4 field duplication into one canonical registration schema.
 
 ### 2. RBAC matrix formalization
@@ -31,7 +31,7 @@ Convert the v2 requirements doc into implementation-ready artifacts: signed-off 
 - Define Session Admin assignment flow (Manager → user) and the new `POST /sessions/{code}/admin` endpoint contract.
 - Specify permission resolution rules (precedence, deny-default, session-scoping).
 
-### 3. Workflow diagrams (Mermaid, `doc/diagrams/`)
+### 3. Workflow diagrams (Mermaid, `docs/diagrams/`)
 - Auth + registration flow (Google login → session code → role assignment).
 - Session lifecycle (Draft → Registration Open → Matching Pending → Proposed → Approved → Closed).
 - Matching approval workflow (run → propose → review → edit → approve → publish).
@@ -60,18 +60,18 @@ Convert the v2 requirements doc into implementation-ready artifacts: signed-off 
 - Participant "my assignment" view.
 
 ## Deliverables
-- `doc/requirements_baseline.md`
-- `doc/rbac_matrix.md`
-- `doc/diagrams/*.mmd`
-- `doc/data_model_erd.md`
-- `doc/api_contracts.md`
-- `doc/wireframes/*.md`
+- `docs/requirements_baseline.md`
+- `docs/rbac_matrix.md`
+- `docs/diagrams/*.mmd`
+- `docs/data_model_erd.md`
+- `docs/api_contracts.md`
+- `docs/wireframes/*.md`
 
 ## Validation
 - Every FR-1..FR-11 maps to ≥1 task in a later phase plan.
 - RBAC matrix covers all Section 4 permissions with no orphan roles.
 - API contracts cover all Section 9 endpoints plus admin assignment.
-- Stakeholder sign-off recorded in `doc/requirements_baseline.md`.
+- Stakeholder sign-off recorded in `docs/requirements_baseline.md`.
 
 ## Dependencies
 - Stakeholder availability for sign-off.

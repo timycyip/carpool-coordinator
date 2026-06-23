@@ -97,7 +97,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - [ ] Scripts parameterized for user count and request rate
 - [ ] Reports: p95/p99 latency, error rate, Lambda throttling, DynamoDB consumed/throttled
 - [ ] Synthetic test data generator for 500-user sessions
-- [ ] Results documented in `doc/load_test_results.md`
+- [ ] Results documented in `docs/load_test_results.md`
 
 **Verification:**
 - [ ] Manual check: run burst test against staging → NFRs evaluated
@@ -112,7 +112,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - `tests/load/registration_surge.js`
 - `tests/load/matching_stress.js`
 - `tests/load/data_generator.py`
-- `doc/load_test_results.md`
+- `docs/load_test_results.md`
 
 **Estimated scope:** M
 
@@ -125,7 +125,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - [ ] Memory right-sized: matching Lambda raised if 256 MB is insufficient
 - [ ] Timeout: 5–10s for API, longer for matching if needed (but < 15s Lambda limit)
 - [ ] Configuration via IaC (not console)
-- [ ] Documented rationale in `doc/lambda_tuning.md`
+- [ ] Documented rationale in `docs/lambda_tuning.md`
 
 **Verification:**
 - [ ] Manual check: re-run burst test → no throttling with reserved concurrency
@@ -135,7 +135,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 
 **Files likely touched:**
 - `infra/lambda-config.ts`
-- `doc/lambda_tuning.md`
+- `docs/lambda_tuning.md`
 
 **Estimated scope:** S
 
@@ -158,7 +158,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 
 **Files likely touched:**
 - `infra/dynamodb-config.ts`
-- `doc/dynamodb_backup.md`
+- `docs/dynamodb_backup.md`
 
 **Estimated scope:** S
 
@@ -183,7 +183,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - `app/middleware/rate_limit.py` (tune)
 - `app/middleware/abuse_detection.py` (tune)
 - `infra/alarms.ts`
-- `doc/rate_limit_tuning.md`
+- `docs/rate_limit_tuning.md`
 
 **Estimated scope:** S
 
@@ -199,7 +199,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - [ ] DynamoDB encryption at rest enabled
 - [ ] IAM: each Lambda has minimal permissions (no wildcard)
 - [ ] Frontend: CSP, HSTS, secure cookies enforced
-- [ ] Findings documented in `doc/security_review.md` with remediations
+- [ ] Findings documented in `docs/security_review.md` with remediations
 
 **Verification:**
 - [ ] Manual check: attempt IDOR → 403
@@ -209,7 +209,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 **Dependencies:** Phases 2–5 complete
 
 **Files likely touched:**
-- `doc/security_review.md`
+- `docs/security_review.md`
 - `frontend/next.config.js` (CSP headers)
 - `infra/iam-policies.ts` (tighten if needed)
 
@@ -236,7 +236,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 **Files likely touched:**
 - `infra/observability-stack.ts`
 - `infra/dashboards/`
-- `doc/observability.md`
+- `docs/observability.md`
 
 **Estimated scope:** M
 
@@ -275,7 +275,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 **Description:** Compile a production readiness checklist and runbooks for common operational scenarios: matching timeout, email send failure + retry, DynamoDB restore, session cancellation rollback, ORS quota exhaustion.
 
 **Acceptance criteria:**
-- [ ] `doc/production_readiness.md` with sign-off checklist (NFRs, security, observability)
+- [ ] `docs/production_readiness.md` with sign-off checklist (NFRs, security, observability)
 - [ ] Runbooks: matching timeout, DLQ drain, DynamoDB restore, ORS quota exhaustion, mass notification failure
 - [ ] Each runbook: symptoms, diagnosis steps, resolution, escalation contact
 - [ ] NFR sign-off: p95 < 800ms, matching < 30s, 99.5% availability, 5000 req/min burst
@@ -287,8 +287,8 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 **Dependencies:** All Phase 6 tasks
 
 **Files likely touched:**
-- `doc/production_readiness.md`
-- `doc/runbooks/*.md`
+- `docs/production_readiness.md`
+- `docs/runbooks/*.md`
 
 **Estimated scope:** M
 
