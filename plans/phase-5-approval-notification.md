@@ -12,6 +12,14 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 |----------|----|----------|-------|
 | **Phase 5** | A2 | The `notification_pending` entity from ADR-0008 is not yet defined in `docs/data_model_erd.md` §2. Add it with PK `NOTIF#<date>`, SK `<timestamp>#<event_id>`, attributes (`recipient_sub`, `recipient_email`, `event_type`, `status`, `attempts`), and TTL strategy before Phase 5 implementation begins. Also add the SQS queue + email Lambda consumer to the Phase 5 task list. | Notification task |
 
+### Cross-phase deferred items from Phase 2 review (2026-06-24)
+
+| Priority | ID | Item | Owner |
+|----------|----|------|-------|
+| **Phase 5** | H2-P2 | Wireframe 02 "Sessions I manage" → `/sessions/ABC123/admin` link is disabled/inactive in Phase 2 (stub). Implement the admin console page that this link points to in Phase 5. | Frontend |
+| **Phase 5** | H3-P2 | Wireframe 07 (Participant Assignment) — full implementation. Depends on `GET /sessions/{code}/match` (approved) and `GET /sessions/{code}/assignment`. | Frontend + Backend |
+| **Phase 5** | B3-P5 | Notification event taxonomy discrepancy — master spec FR-10 lists `registration success`, `matching approved`, `match changed`, `session cancelled`; API Contract `NotificationEvent` lists `registration_open`, `registration_closing_reminder`, `session_cancelled`, `custom`. Reconcile and adopt API Contract names as canonical. | Backend |
+
 ---
 
 ## Open Questions (to refine)

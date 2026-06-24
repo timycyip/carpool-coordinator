@@ -1,5 +1,10 @@
 # Wireframe 07 — Participant "My Assignment" View
 
+> **Phase scope: Phase 5 (Approval & Notification).** This wireframe depends on
+> `GET /sessions/{code}/match` (approved version) and `GET /sessions/{code}/assignment`
+> — both unavailable until Phase 4 (matching engine) and Phase 5 (approval workflow)
+> are complete. Included here as a Phase 1 design reference; do not implement in Phase 2.
+
 ## Screen name & route
 - **Route (Next.js App Router):** `app/(app)/sessions/[code]/me/page.tsx`
 - **URL examples:** `/sessions/ABC123/me`
