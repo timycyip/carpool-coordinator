@@ -87,7 +87,7 @@ The page is the FR-1 "browse app" surface.
 ## Interactions
 1. **On mount** — fetch the user's sessions via the GSI-backed list endpoint.
 2. **Click a SessionCard** — route to:
-   - `role === 'admin'` → `/sessions/ABC123/admin`
+   - `role === 'admin'` → `/sessions/ABC123/admin` (Phase 5 — admin console; **Phase 2 stub**: this link is inactive/disabled until Phase 5 admin console lands)
    - `status === 'registration_open' && !user_registered` → `/sessions/ABC123/register`
    - `status === 'approved' || 'closed'` → `/sessions/ABC123/me`
    - otherwise (`draft`, `matching_pending`, `matching_proposed`) → read-only

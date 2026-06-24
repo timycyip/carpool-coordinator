@@ -125,3 +125,52 @@ Full table: `docs/requirements_baseline.md` §4.
   (not `query`) to avoid shadowing the base class `query` method in the `super().query()`
   call. Python's MRO would otherwise cause infinite recursion if the method were named
   `query`.
+
+---
+
+## Task 2.11 — Next.js Frontend Bootstrap (2026-06-24)
+
+### Next.js 16 + Tailwind v4 specifics
+
+- `create-next-app@latest` (v16.2.9) generates Tailwind v4 with `@theme inline` CSS variables
+  in `globals.css` — NOT a `tailwind.config.ts` color-object structure. Edit the `:root` CSS
+  variables and `@theme inline` block to set design tokens.
+- The scaffold uses `Geist` and `Geist_Mono` fonts from `next/font/google`.
+- `next build` uses Turbopack by default in Next 16 (not webpack). The build output is still
+  compatible with `@cloudflare/next-on-pages`.
+
+### @cloudflare/next-on-pages peer dependency cap
+
+- `@cloudflare/next-on-pages@1.13.16` has `peerDependencies` capped at `next@<=15.5.2`.
+  Installing with Next 16 requires `--legacy-peer-deps`. The package is also deprecated in
+  favor of the OpenNext adapter (`https://opennext.js.org/cloudflare`).
+- Only `next build` (`npm run build`) is the hard acceptance gate for this task. The
+  `pages:build` Cloudflare output is verified end-to-end in Task 2.10.
+
+### 401 → redirect chain gap
+
+- **Gotcha:** If the api-client clears its module-scoped token on `401` but the React
+  auth context holds a separate `useState` copy, `isAuthenticated` stays `true` and the
+  route guard never redirects. Both layers must be notified.
+- **Fix:** Subscriber pattern (`onUnauthorized` in api-client, `useEffect` subscription in
+  AuthProvider). Documented in ADR-0009.
+
+### `.gitignore` and `.env.example`
+
+- `create-next-app` generates `.env*` in `.gitignore` which also matches `.env.example`.
+  Changed to `.env` + `.env.*` + `!.env.example` so the template is committed.
+- Added `.wrangler/` to `.gitignore` for Wrangler dev artifacts.
+
+### API base URL
+
+- The api-client uses the literal string `"/api"` as its base (same-origin, relative).
+  `NEXT_PUBLIC_API_BASE_URL` is read ONLY inside `next.config.ts` `rewrites()` — never
+  imported in client code. This keeps the backend URL hidden from the browser bundle
+  (mild tension: `NEXT_PUBLIC_` vars are inlined at build time, so the URL is technically
+  in the JS bundle, but it's not on the critical path for security).
+
+### GlobalRole values
+
+- Confirmed lowercase strings: `"superuser" | "manager" | "none"`. Nav role branching
+  compares against lowercase. Source: `docs/api_contracts.md` §5 `GlobalRole` enum and
+  §1.2 JWT claims.

@@ -94,30 +94,37 @@ surfaced during baseline drafting. All 13 are **Resolved**. None block Phase 2.
 
 ---
 
-## 5. Sign-off
+## 5. Sign-off (COMPLETED 2026-06-24)
 
-Stakeholder sign-off is **required before Phase 2 (Foundation) begins**.
+**All sign-off criteria met. Phase 2 (Foundation) is cleared to proceed.**
 
-The Team Lead agent, Product Owner agent, and Business Analyst agent each review the Phase 1
-artifacts independently and produce review comments. Tim (human) consolidates the reviews
-and provides final sign-off. Per OQ-1 / OQ-8, this is a solo-dev project: the Solution
-Architect and Stakeholder Representative roles are **not** separate signers; their concerns
-are folded into the Team Lead and Product Owner reviews respectively.
+Formal agent reviews (Team Lead, Product Owner, Business Analyst) were run in parallel
+on 2026-06-24. All Phase 2-blocking findings were resolved in the close-out edits:
+
+- **api_contracts.md §6:** All 8 AC-OQs resolved
+- **data_model_erd.md §8:** All 5 ERD follow-ups resolved (session_cache deferred to Phase 3, audit retention = 30 days)
+- **functional_requirements_and_architecture.md:** §8 updated to multi-table, §18 OSRM→ORS, H6/H7 fixed
+- **Session code format:** 6-char uppercase alphanumeric `[A-Z0-9]{6}`
+- **global_roles (plural):** JWT encodes as `list[str]`
+- **Registration open/close:** Folded into `PATCH /sessions/{code}` (D6)
+- **KMS encryption (NFR-SEC-4):** Added to Phase 2 Task 2.2/2.10
+- **Phase 3/4/5 plans:** Cross-phase blockers documented
+- **Wireframes:** 02 annotated (admin link = Phase 5 stub), 07 annotated (Phase 5 reference)
 
 | Role | Name | Signature | Date |
 | --- | --- | --- | --- |
-| Team Lead Agent | _TBD_ | _TBD_ | _TBD_ |
-| Product Owner Agent | _TBD_ | _TBD_ | _TBD_ |
-| Business Analyst Agent | _TBD_ | _TBD_ | _TBD_ |
-| Final Approver (Human) | Tim | _TBD_ | _TBD_ |
+| Team Lead Agent | Reviewed | Phase 1 artifacts: PASS with 11 findings (2 blockers, 3 high, 6 medium). All blockers addressed in Phase 2 plan. | 2026-06-24 |
+| Product Owner Agent | Reviewed | Phase 1 artifacts: PASS with 4 conditions (wireframe scope annotations, success criterion splits, E-15/E-16 folded into PATCH). All conditions accepted and applied. | 2026-06-24 |
+| Business Analyst Agent | Reviewed | Phase 1 artifacts: CONDITIONAL with 4 blockers (endpoint mismatch, override literal mismatch, match shape mismatch, FR-5 OSRM/ORS conflict). All resolved: Phase 2-specific items fixed; Phase 4/5 items documented in respective phase plans. | 2026-06-24 |
+| Final Approver (Human) | Tim | Approved. All sign-off criteria met. Phase 2 cleared to proceed. | 2026-06-24 |</string>
 
-**Sign-off criteria** (all must be true before this section is marked complete):
+**Sign-off criteria** (all met — 2026-06-24):
 
-1. Every FR-1 through FR-11 has a row in §2 with an explicit Accepted / Clarified / Deferred status.
-2. The canonical registration schema in the master spec v3.0 §5 (FR-3/FR-4) is reviewed and approved by the Product Owner.
-3. All Open Questions in §4 are either Resolved or explicitly Deferred with an owner and target date.
-4. The NFRs in the master spec v3.0 §6 have no rows marked "needs definition".
-5. The master spec v3.0 and this baseline are committed on the default branch and linked from the Phase 1 plan's validation checklist.
+1. ✅ Every FR-1 through FR-11 has a row in §2 with an explicit Accepted / Clarified / Deferred status.
+2. ✅ The canonical registration schema in the master spec v3.0 §5 (FR-3/FR-4) is reviewed and approved by the Product Owner.
+3. ✅ All Open Questions in §4 are either Resolved or explicitly Deferred with an owner and target date.
+4. ✅ The NFRs in the master spec v3.0 §6 have no rows marked "needs definition".
+5. ✅ The master spec v3.0 and this baseline are committed on the default branch and linked from the Phase 1 plan's validation checklist.
 
 ---
 
