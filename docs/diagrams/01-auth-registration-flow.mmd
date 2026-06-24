@@ -1,0 +1,52 @@
+%% Auth + Registration Flow — Carpool Coordinator Phase 1
+%% Covers FR-1 (Authentication & Session Registration) and ADR-0002 (JWT in memory)
+%% Flow: User opens app → Google OIDC login → browse → enter session code → register as Driver/Passenger
+
+flowchart TD
+    Start([User opens app]) --> BrowseCheck{Authenticated<br/>via Google?}
+    BrowseCheck -- No --> GLogin[Redirect to Google OIDC<br/>Google Identity Services]
+    GLogin --> GConsent{User consents<br/>to share profile?}
+    GConsent -- No --> Denied[Access denied<br/>return to start]
+    GConsent -- Yes --> JWTIssue[Backend POST /auth/google<br/>verifies Google ID token<br/>issues signed JWT 1h TTL]
+    JWTIssue --> StoreMem[JWT stored in-memory<br/>in Next.js auth context<br/>per ADR-0002]
+    BrowseCheck -- Yes --> Browse[User browses app<br/>sends Authorization Bearer JWT]
+    StoreMem --> Browse
+
+    Browse --> HasCode{User has<br/>session code?}
+    HasCode -- "No just browsing" --> Browse
+    HasCode -- "Yes manual or<br/>prepopulated URL" --> EnterCode[User enters session code<br/>manual OR via /register?session=ABC123]
+    EnterCode --> ApiCall[POST /sessions/CODE/register<br/>Authorization Bearer JWT]
+    ApiCall --> JwtValid{JWT signature<br/>valid and not expired}
+
+    JwtValid -- No --> JwtFail[401 Unauthorized<br/>re-authenticate via Google]
+    JwtFail --> Browse
+
+    JwtValid -- Yes --> CodeExists{Session code<br/>exists in DynamoDB}
+    CodeExists -- No --> CodeNotFound[Return session code<br/>not found]
+    CodeNotFound --> EnterCode
+
+    CodeExists -- Yes --> NotExpired{Session not expired<br/>registration_deadline not passed}
+    NotExpired -- No --> ExpiredFail[Return registration closed<br/>or session expired]
+    ExpiredFail --> Browse
+
+    NotExpired -- Yes --> RegWindowOpen{Status is<br/>Registration Open<br/>and window open}
+    RegWindowOpen -- No --> WindowError[Return registration<br/>not yet open]
+    WindowError --> Browse
+
+    RegWindowOpen -- Yes --> RolePermitted{User role<br/>permitted to register}
+    RolePermitted -- "Manager or Superuser" --> AdminBypass[Skip session-code invite<br/>browse sessions freely]
+    AdminBypass --> Browse
+
+    RolePermitted -- "No not invited" --> NotInvited[Return forbidden<br/>not invited to session]
+    NotInvited --> Browse
+
+    RolePermitted -- "Yes invited" --> ChooseRole[User chooses role<br/>Driver or Passenger]
+    ChooseRole --> SubmitForm[Submit registration form<br/>FR-3 and FR-4 fields<br/>name email postal code times]
+    SubmitForm --> Geo[Backend geocodes postal code<br/>via cached Nominatim]
+    Geo --> WriteReg[Write REG#user_sub item<br/>under PK SESSION#ABC123<br/>in DynamoDB app_data]
+    WriteReg --> NotifEvent[Emit registration-success event]
+    NotifEvent --> SendRegEmail[Synchronous email send<br/>via Microsoft Graph sendMail<br/>see diagram 04]
+    SendRegEmail --> Done([User registered as<br/>Driver or Passenger])
+
+    classDef fail fill:#fee,stroke:#c33
+    class JwtFail,CodeNotFound,ExpiredFail,WindowError,NotInvited,Denied fail

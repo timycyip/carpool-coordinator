@@ -2,6 +2,22 @@
 
 Builds on Phase 2 (working auth + session CRUD + RBAC). Goal: users can register as drivers/passengers into a session, with location lookup via OSM services.
 
+---
+
+## Phase 1 Review Advisories (carried forward)
+
+These advisories from the Phase 1 consolidated review must be addressed during Phase 3.
+
+| Priority | ID | Advisory | Owner |
+|----------|----|----------|-------|
+| **Phase 3** | A4 | No wireframe exists for the Manager/Superuser session-creation flow. Wireframe 01 shows a "Create a new session →" link with no corresponding screen. Add a `docs/wireframes/08-session-creation.md` or embed the flow in wireframes 02/05. | Frontend task |
+| **Phase 3** | A10 | Wireframe 07 (participant assignment) has no "Withdraw my registration" button. `DELETE /sessions/{code}/me` is defined in the API contract as a companion endpoint. Add withdrawal CTA to the participant view and handle the day-of-cancellation flow. | Frontend task |
+| **Phase 3** | A11 | Baseline §3 canonical registration schema supersedes FR-3/FR-4 without an ADR. The baseline §3.6 Supremacy Statement says "any future change requires an ADR" — the initial supersession itself should be an ADR for audit traceability. Write **ADR-0009 (Registration Schema Supersession)** before Phase 3 implementation begins. | Planning |
+| **Phase 3** | A12 | API contract §3.6 status codes document lists `409 REGISTRATION_CLOSED` but not `ALREADY_REGISTERED` (even though §2.1 defines it). Add to the endpoint's response docs. | Registration API task |
+| **Phase 3** | A13 | Day-of-event registration edge case: `earliest_departure_time ≥ now()` rejects users registering after the session window opens. If admins want late registration, no override exists. Clarify policy during implementation — either document as by-design or add admin bypass. | Registration API task |
+
+---
+
 ## Open Questions (to refine)
 - [ ] ORS free-tier matrix limit (~50 locations/call) — what batching strategy for sessions with 200+ participants?
 - [ ] Geocode cache TTL: permanent (postal code centroids rarely change) or 90-day refresh?

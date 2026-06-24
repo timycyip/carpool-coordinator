@@ -4,11 +4,11 @@
 How might we deliver a working carpool-coordination web app for a specific NGO group in 3 weeks with a 4–6 person team — without the infrastructure of a venture-backed SaaS?
 
 ## Recommended Direction
-Build a single-tenant web app (FastAPI on Lambda + Next.js on Cloudflare Pages, one DynamoDB table) that covers the full vertical slice: Google login → session → driver/passenger registration with geocoded locations → matching engine → admin approval → email notification. Use free-tier OpenRouteService for routing instead of self-hosting OSRM. Send email synchronously via Microsoft Graph from the API Lambda — no queue, no separate email worker. Keep the 5-role RBAC and the CloudWatch → S3 → Athena observability pipeline as specified.
+Build a single-tenant web app (FastAPI on Lambda + Next.js on Cloudflare Pages, one DynamoDB table) that covers the full vertical slice: Google login → session → driver/passenger registration with geocoded locations → matching engine → admin approval → email notification. Use free-tier OpenRouteService for routing instead of self-hosting OSRM. Notifications are deferred per ADR-0008: the API queues `notification_pending` items and a separate SQS → Lambda consumer sends via Microsoft Graph. Keep the 5-role RBAC and the CloudWatch → S3 → Athena observability pipeline as specified.
 
-The original v2 architecture over-engineered three areas that are now cut: self-hosted OSRM (replaced by ORS free tier), a 4-table DynamoDB layout (collapsed to one table with TTL items), and an async SQS → email-Lambda notification pipeline (replaced by synchronous Graph `sendMail`). These three cuts remove roughly one full week of infra work and an ongoing operational burden (OSRM host, queue monitoring, DLQ drains) that a single NGO deployment does not need.
+The original v2 architecture over-engineered three areas that are now cut: self-hosted OSRM (replaced by ORS free tier), a 4-table DynamoDB layout (collapsed to one table with TTL items), and a synchronous email fan-out (replaced by a deferred queue — see ADR-0008 and §notification-deferral below). These three cuts remove roughly one full week of infra work and an ongoing operational burden (OSRM host, queue monitoring, DLQ drains) that a single NGO deployment does not need.
 
-What makes this fit in 3 weeks is deferring everything that isn't on the critical path to participant-value: manual override UI, version compare, load testing, abuse-detection hardening, frontend accessibility/polish, and the security review are all post-MVP. The admin can re-run matching instead of manually dragging passengers between drivers; the NGO's internal traffic doesn't need brute-force protection on day one.
+What makes this fit in 3 weeks is deferring everything that isn't on the critical path to participant-value: load testing, abuse-detection hardening, frontend accessibility/polish, and the security review are all post-MVP. The NGO's internal traffic doesn't need brute-force protection on day one.
 
 ## Key Assumptions to Validate
 - [ ] ORS free tier (2,000 req/day, 40 req/min) is sufficient for the NGO's session sizes — test with a 200-participant matrix call (200×200 = 40,000 entries; ORS matrix takes up to ~50 locations per call, so batching is required). Validate the batching approach early in Phase 3.
@@ -25,15 +25,15 @@ What makes this fit in 3 weeks is deferring everything that isn't on the critica
 - Matching engine: 4 stages (geographic clustering → candidate filtering → cost matrix via ORS → greedy optimization), versioned, deterministic
 - Admin matching review UI (run, view proposed match, per-driver cards with route)
 - Approval + publish with FR-9 visibility rules (pre-approval hidden; post-approval assigned-only)
-- Email notifications: 4 types (registration success, matching approved, match changed, session cancelled), sent synchronously via Microsoft Graph
+- Email notifications: 4 types (registration success, matching approved, match changed, session cancelled), delivered via a deferred SQS → Lambda consumer that sends via Microsoft Graph `sendMail`. Notifications are deferred: API queues notification_pending items; a separate SQS → Lambda consumer sends emails via Microsoft Graph. See ADR-0008.
 - Participant assignment views (driver sees own passengers + route; passenger sees own driver + pickup)
 - Basic audit logging (login, session changes, approvals, overrides)
 - CloudWatch Logs → S3 (30-day lifecycle) → Athena pipeline + basic dashboards/alarms
 - Basic rate limiting (60/min IP, 120/min user, TTL items in app_data)
 
 **Deferred (post-MVP):**
-- Manual override UI (admin re-runs matching instead)
-- Match version compare
+- Manual override UI is IN SCOPE for MVP. Admins can drag-to-reorder passengers, lock assignments, switch match versions, and export CSV from the admin matching review screen.
+- Match version compare is IN SCOPE for MVP.
 - Load testing, concurrency tuning, DynamoDB restore drill
 - Abuse detection / brute-force escalation
 - External security review (keep basic JWT/IDOR checks only)
@@ -46,9 +46,9 @@ What makes this fit in 3 weeks is deferring everything that isn't on the critica
 
 ## Not Doing (and Why)
 - **Self-hosted OSRM** — operational burden (host, OSM extract, health checks, fallback matrix) is unjustified for one NGO. ORS free tier covers routing + matrix. The entire OSRM IaC stack, resilience task, and fallback cache are removed.
-- **SQS queue + separate email Lambda + DLQ** — async pipeline is overkill for low-volume transactional email. Synchronous Graph `sendMail` from the API Lambda, with admin-retry on failure, is simpler and sufficient. Removes queue monitoring, DLQ drains, and a second Lambda to maintain.
+- **Deferred notification pipeline (replaces synchronous Graph `sendMail`)** — Notifications are queued, not sent synchronously. The API writes `notification_pending` items to DynamoDB and returns immediately; a separate SQS → Lambda consumer drains the queue and calls Microsoft Graph `sendMail` with exponential-backoff retries. Failed items are marked for admin review. This stays within the 10s Lambda timeout for the API path (which never blocks on email) and removes the synchronous fan-out risk. See ADR-0008.
 - **4 DynamoDB tables** — `session_cache`, `rate_limit_cache`, `brute_force_counter` collapse into TTL items on `app_data`. One table, one billing model, one PITR target.
-- **Manual override UI** — drag/drop reassignment with live constraint validation is a meaningful frontend effort. For MVP, the admin re-runs matching (deterministic, seeded) or edits registrations and re-runs. Override service + UI deferred.
+- **Manual override UI** — drag/drop reassignment with live constraint validation. IN SCOPE for MVP: move passenger (drag-to-reorder), unassign, lock, match version switching. Service-layer contract (`PATCH /match/manual`) and admin UI are both in scope for Phase 5.
 - **Hardening sprint (Phase 6)** — load testing, security review, accessibility, Lighthouse are real work but not day-one value for a single internal NGO deployment. Basic JWT validation + IDOR checks stay; the rest is post-MVP.
 
 ## Open Questions

@@ -1,7 +1,16 @@
-# Carpool Matching Application — Functional Requirements & Solution Architecture (v2)
+# Carpool Matching Application — Functional Requirements & Solution Architecture (v3)
 
 ## Version
-v2.0 (Updated with stakeholder feedback)
+v3.0 (Updated with Phase 1 Discovery resolutions)
+
+## Revision Log
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v2.0 | 2026-06-23 | Initial stakeholder-reviewed spec |
+| v3.0 | 2026-06-23 | Phase 1 Discovery resolutions: canonical registration schema replaces FR-3/FR-4; NFRs expanded with testable acceptance criteria; FR-5 routing provider changed to ORS; FR-10 notifications changed to deferred delivery (ADR-0008); §8 data model updated to multi-table (ADR-0001); §10 AWS components updated to 5 tables; session status enum changed to snake_case; frontend locked to Next.js; idle cost NFR corrected |
+
+> **Note:** This spec is now the single source of truth for all functional and non-functional requirements. The `docs/requirements_baseline.md` is a thin delta document tracking review status and sign-off only.
 
 ## Authors
 - Business Analyst
@@ -229,70 +238,69 @@ Session attributes:
 | registration_deadline | datetime     |
 | status                | enum         |
 
-Session status:
+Session status (snake_case enum values):
 
-* Draft
-* Registration Open
-* Matching Pending
-* Matching Proposed
-* Approved
-* Closed
-
----
-
-## FR-3 Registration
-
-### Driver fields
-- name
-- Google email
-- approximate postal code
-- seats available for additional passengers
-- earliest time to offer ride
-
-### Passenger fields
-- name
-- Google email
-- approximate postal code
-- earliest available time
+* `draft`
+* `registration_open`
+* `matching_pending`
+* `matching_proposed`
+* `approved`
+* `closed`
 
 ---
 
-## FR-4 User Registration
+## FR-3 / FR-4 Registration (Canonical Schema)
 
-Users register into session as:
+> **This schema supersedes the original v2 FR-3 and FR-4 field lists.** It is the single source of truth for Phase 3 registration implementation. Any future change requires a new ADR.
 
-* Driver
-* Passenger
+Users register into a session as either a **Driver** or a **Passenger**. The role is selected at registration time and cannot be changed (users must delete and re-create to switch roles).
 
-Common fields:
+### Common Fields (required for every registrant)
 
-| Field            | Required |
-| ---------------- | -------- |
-| Name             | Yes      |
-| Google Email     | Yes      |
-| Location         | Yes      |
-(approximate postal code)
-| Earliest Departure Time      |
-| Latest Departure Time        |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | string (1–120 chars) | Yes | Display name shown to admins and (post-publish) to assigned peers. |
+| `email` | string (RFC 5322) | Yes | Must match the authenticated Google OIDC email; otherwise registration fails. |
+| `role` | enum (`driver` \| `passenger`) | Yes | Selected at registration time; changing role requires deleting and re-creating the registration. |
+| `postal_code` | string | Yes | Approximate postal code (or ZIP) geocoded server-side via FR-5; raw lat/lon is never collected from the user. |
+| `earliest_departure_time` | ISO-8601 datetime | Yes | The earliest the user can leave their pickup point; used by the matching engine's time-window logic. |
+| `latest_departure_time` | ISO-8601 datetime | Yes | The latest the user can leave their pickup point; must be ≥ `earliest_departure_time` and ≤ session's `registration_deadline`. |
+| `session_code` | string | Yes | FK to the session; provided in the registration URL or entered manually. |
 
----
+### Driver-Specific Fields (required only when `role = driver`)
 
-### Driver Additional Fields
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `seat_capacity` | integer (1+) | Yes | Number of passenger seats the driver offers in addition to themselves. No hard cap. |
+| `earliest_pickup_time` | ISO-8601 datetime | Yes | Earliest time the driver can start picking up passengers. |
+| `latest_pickup_time` | ISO-8601 datetime | Yes | Latest time the driver will start their route. Must satisfy `earliest_pickup_time ≤ latest_pickup_time` and the session's `latest_arrival` constraint. |
 
-| Field                     |
-| ------------------------- |
-| Seat Capacity             |
-| Earliest Pickup Time      |
-| Latest Pickup Time        |
+### Passenger-Specific Fields (required only when `role = passenger`)
 
----
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `accessibility_requirements` | string (0–500 chars) | Optional | Free-text accessibility needs. Used as a soft constraint by the matching engine; never auto-overrides a hard constraint. |
+| `special_notes` | string (0–500 chars) | Optional | Free-text notes for the driver (e.g., "traveling with small child"). Visible to the assigned driver only after publish. |
 
-### Passenger Additional Fields
+### Server-Derived Fields (never accepted from the client)
 
-| Field                      |
-| -------------------------- |
-| Accessibility Requirements |
-| Special Notes              |
+| Field | Type | Source |
+| --- | --- | --- |
+| `registration_id` | ULID | Generated on create. |
+| `user_sub` | string (Google `sub`) | From the verified JWT. |
+| `geocoded_location` | `{lat: float, lon: float, source: "nominatim", cached_at: ISO-8601}` | From FR-5 geocode cache or live Nominatim call. |
+| `created_at` / `updated_at` | ISO-8601 datetime | Server clock. |
+| `status` | enum (`active` \| `withdrawn`) | Defaults to `active`; set to `withdrawn` on user-initiated delete. |
+
+### Validation Rules (enforced server-side, 422 on failure)
+
+1. `earliest_departure_time ≤ latest_departure_time`.
+2. `earliest_departure_time ≥ now()` (no back-dated registrations).
+3. Both departure times fall within `[session.earliest_pickup, session.latest_arrival]`.
+4. `seat_capacity ≥ 1` if `role = driver`.
+5. If `role = driver`: `earliest_pickup_time ≤ latest_pickup_time` and both fall within the session window.
+6. A user may register once per session; a second `POST /sessions/{code}/register` for the same `user_sub` returns 409.
+7. Postal code must geocode successfully (FR-5); failure returns 422.
 
 ---
 
@@ -319,9 +327,12 @@ Calculate:
 * distance
 * detour
 
-Suggested:
+Provider:
 
-* OSRM
+* OpenRouteService (ORS) free-tier API (`/v2/directions`, `/v2/matrix`)
+* Free tier: 2000 req/day, 40 req/min, ~50 locations per matrix call
+* Matrix calls must be chunked for sessions with >50 locations
+* OSRM self-hosting is deferred to post-MVP
 
 Required endpoints:
 
@@ -460,6 +471,17 @@ Events:
 * match changed
 * session cancelled
 
+### Delivery Model (per ADR-0008)
+
+Email delivery is **deferred**, not synchronous:
+
+1. API Lambda writes `notification_pending` items to DynamoDB and returns 200 immediately.
+2. An SQS → email Lambda consumer reads pending items and sends via Microsoft Graph `sendMail` to M365 Exchange.
+3. Failed sends retry with exponential backoff (3 attempts); permanently failed items are marked `failed` for admin review.
+4. The API request path never blocks on email delivery.
+
+Email templates: HTML with org logo placeholder.
+
 Future:
 
 * SMS
@@ -488,38 +510,52 @@ Required for:
 
 # 6. Non-Functional Requirements
 
-## Performance
+Each NFR must be verifiable by an automated test, a CloudWatch metric + alarm, or a documented operational runbook step.
 
-* API latency p95 < 800ms
-* Matching < 30 sec for 500 users
+## 6.1 Performance
 
----
+| ID | Requirement | Acceptance Criteria (testable) |
+| --- | --- | --- |
+| NFR-PERF-1 | API latency p95 < 800ms | Measured at the Lambda Function URL via CloudWatch EMF metrics. p95 of all 2xx + 4xx API responses, sampled over a rolling 24h window, is < 800ms. Matching endpoints (`POST /match/run`) are excluded from this SLO. |
+| NFR-PERF-2 | Matching completes < 30s for 500 users | End-to-end `POST /sessions/{code}/match/run` (request → 200 with proposed match) completes in < 30s wall-clock for a session with 500 registrants in a memory-isolated Lambda benchmark. Validated in Phase 4 spike and re-verified in Phase 6 load test. (MVP greedy solver caps at <300 users; 500-user target is a Phase 6 post-MVP goal.) |
+| NFR-PERF-3 | Cold-start p95 < 1500ms | First-request latency after a 10-minute idle window is p95 < 1500ms. Tracked via CloudWatch `init_duration`. Provisioned concurrency is evaluated in Phase 6 if not met. |
+| NFR-PERF-4 | Frontend LCP < 2.5s on 4G | Largest Contentful Paint on the registration dashboard is < 2.5s. Verified in Phase 2 bootstrap and re-verified in Phase 6. |
 
-## Availability
+## 6.2 Availability
 
-Target:
-99.5%
+| ID | Requirement | Acceptance Criteria |
+| --- | --- | --- |
+| NFR-AVAIL-1 | 99.5% monthly availability | Monthly uptime (successful responses / total requests, excluding client errors) ≥ 99.5%. Measured at the Lambda Function URL. |
+| NFR-AVAIL-2 | Zero-data-loss for session, registration, match, and audit writes | Every write returns success only after DynamoDB confirms the item is durably stored. No fire-and-forget writes on these tables. |
 
----
+## 6.3 Scalability
 
-## Scalability
+| ID | Requirement | Acceptance Criteria |
+| --- | --- | --- |
+| NFR-SCALE-1 | Handle bursts up to 5000 req/min | Sustained 5000 req/min for 5 minutes produces zero 5xx responses and no DynamoDB throttling (per ADR-0007 on-demand capacity). Validated via Phase 6 load test. |
+| NFR-SCALE-2 | Idle cost ≤ $1/month | Monthly AWS bill for an idle deployment (no traffic for 30 days) is ≤ $1.00 (CloudWatch Logs ingestion may incur minimal cost). Verified by a monthly cost-anomaly review. |
+| NFR-SCALE-3 | Multi-session per user | A single authenticated user can hold active registrations in ≥10 sessions concurrently without quota error. |
 
-System must support:
+## 6.4 Security
 
-* idle traffic
-* sudden bursts up to 5000 requests/min
+| ID | Requirement | Acceptance Criteria |
+| --- | --- | --- |
+| NFR-SEC-1 | JWT validation on every API request | All API endpoints reject requests without a valid, unexpired, signature-verified JWT (except `POST /auth/google`). Verified by an automated test suite in Phase 2. |
+| NFR-SEC-2 | Rate limiting — 60 req/min/IP and 120 req/min/user | Requests exceeding either limit return 429 with a `Retry-After` header. Counters live in the `rate_limit_cache` table with TTL. Verified by Phase 2 tests and Phase 6 load test. |
+| NFR-SEC-3 | Anti-bot protection | Cloudflare Free WAF + Turnstile (or equivalent) protects registration and authentication endpoints. Verified by manual abuse test in Phase 6. |
+| NFR-SEC-4 | Encrypted at rest | All DynamoDB tables use AWS-managed KMS encryption. All S3 buckets use SSE-KMS. Verified by Terraform plan + AWS Config rule. |
+| NFR-SEC-5 | No passwords stored | The codebase and DynamoDB schema contain no password fields. Verified by grep test in Phase 2 CI. |
+| NFR-SEC-6 | Per-session RBAC enforcement | A passenger cannot read another session's registration data via any endpoint; a non-admin Session Admin cannot read sessions they do not admin. Verified by automated IDOR test suite in Phase 5. |
+| NFR-SEC-7 | PII minimization in audit logs | Audit log `payload_summary` fields never contain email, name, postal code, or geocoded coordinates in plaintext. Verified by a Phase 5 audit-log inspection test. |
 
----
+## 6.5 Operability & Observability
 
-## Security
-
-Requirements:
-
-* JWT validation
-* rate limiting
-* anti-bot protection
-* encrypted storage
-* no password storage
+| ID | Requirement | Acceptance Criteria |
+| --- | --- | --- |
+| NFR-OPS-1 | Structured JSON logs to CloudWatch | Every Lambda invocation emits a structured JSON log line with `request_id`, `route`, `user_sub` (or `anon`), `status`, `latency_ms`. Verified by log-format test in Phase 2. |
+| NFR-OPS-2 | 30-day log retention via S3 lifecycle | CloudWatch → S3 subscription with a 30-day lifecycle policy deletes old logs automatically. Verified by Terraform plan + AWS Config rule. |
+| NFR-OPS-3 | Athena-queryable logs | Logs in S3 are queryable via Athena for incident analysis and abuse investigation. Verified in Phase 2 bootstrap. |
+| NFR-OPS-4 | CloudWatch alarms on 5xx rate and p95 latency | Alarms page (or notify) on >1% 5xx rate over 5 min or p95 latency > 2× SLO for 10 min. Verified in Phase 6. |
 
 ---
 
@@ -546,7 +582,7 @@ Used for:
 # 8. Data Model
 
 Recommended:
-Single-table DynamoDB design
+Multi-table DynamoDB design — tables named per data model (per ADR-0001). The `app_data` table uses the single-table PK/SK-overloading pattern internally for business entities. Cache and counter stores are in separate named tables with TTL. See `docs/data_model_erd.md` for the full ERD.
 
 ---
 
@@ -700,12 +736,15 @@ Recommended:
 
 DynamoDB
 
-Tables:
+Tables (per ADR-0001 — named per data model):
 
-* app_data
-* session_cache
-* rate_limit_cache
-* brute_force_counter
+* `app_data` (business entities: users, sessions, registrations, matches, audit logs)
+* `session_cache` (session-scoped ephemeral state, TTL)
+* `rate_limit_cache` (per-IP/per-user request counters, TTL)
+* `brute_force_counter` (failed-auth tracking, TTL)
+* `geocode_cache` (postal-code → lat/lon cache, 30-day TTL)
+
+All tables use on-demand capacity (ADR-0007). See `docs/data_model_erd.md` for the full schema.
 
 ---
 
@@ -755,7 +794,7 @@ Use for:
 * debugging
 
 Idle cost:
-$0
+≤ $1/month (CloudWatch Logs ingestion may incur minimal cost)
 
 ---
 
@@ -930,14 +969,11 @@ Apply:
 
 # 15. Frontend Recommendation
 
-Suggested:
-
-* React
-  or
-* Next.js
+Framework:
+Next.js (App Router) — locked decision
 
 Deployment:
-Cloudflare Pages
+Cloudflare Pages via `next-on-pages` (preview per branch, production on merge to main)
 
 Benefits:
 
@@ -1040,6 +1076,14 @@ Engineering:
 
 Total:
 4–6 people minimum
+
+---
+
+> **Project Note (2026-06-23):** The actual project is a solo-dev deployment with AI agents
+> filling the roles above (Team Lead agent, Product Owner agent, Business Analyst agent,
+> Solution Architect agent, etc.). The role definitions above describe the *responsibilities*
+> each agent covers, not separate human team members. See `docs/requirements_baseline.md` §5
+> for the sign-off process.
 
 ---
 

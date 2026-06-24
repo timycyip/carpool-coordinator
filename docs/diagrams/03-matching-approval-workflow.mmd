@@ -1,0 +1,52 @@
+%% Matching Approval Workflow — Carpool Coordinator Phase 1
+%% Covers FR-6 (Matching Engine), FR-7 (Approval Workflow), FR-8 (Manual Override), FR-9 (Visibility)
+%% Per API §1.8 session status enum values are snake_case.
+%% Flow: Admin runs matching → propose → review → edit → approve → publish → notify
+
+flowchart TD
+    Start([Admin clicks<br/>Run Matching]) --> RBACCheck{RBAC check<br/>Session Admin or higher}
+    RBACCheck -- No --> Deny[403 Forbidden<br/>audit log failed access]
+    Deny --> End1([Stop])
+
+    RBACCheck -- Yes --> StateCheck{Session status<br/>is matching_pending<br/>or approved}
+    StateCheck -- No --> StateError[409 Conflict<br/>invalid session state]
+    StateError --> End1
+
+    StateCheck -- Yes --> RunEngine[Matching engine runs<br/>greedy heuristic for MVP<br/>or OR-Tools for production]
+    RunEngine --> WriteVersion[Write new match version<br/>MATCH#Vn+1 under<br/>PK SESSION#ABC123]
+    WriteVersion --> UpdateState[Update session status<br/>to matching_proposed]
+    UpdateState --> Review[Admin reviews proposed match<br/>scores and per-driver loads]
+
+    Review --> Decision{Admin decision}
+    Decision -- "Edit manually" --> EditOps[Admin performs FR-8 operations<br/>move passenger to another driver<br/>unassign passenger<br/>mark passenger unmatched<br/>lock assignment]
+    EditOps --> AuditEdit[Audit log admin override<br/>PATCH /match/manual]
+    AuditEdit --> Review
+
+    Decision -- "Discard and re-run" --> Discard[Discard current version<br/>revert to matching_pending]
+    Discard --> RunEngine
+
+    Decision -- "Approve" --> ApproveCheck{Exactly one<br/>version selected}
+    ApproveCheck -- No --> ApproveErr[400 Bad Request<br/>must select one version]
+    ApproveErr --> Review
+
+    ApproveCheck -- Yes --> Approve[POST /match/approve<br/>mark MATCH#Vn as approved<br/>update session status to approved]
+    Approve --> Publish[Publish assignments<br/>per FR-9 visibility rules]
+    Publish --> NotifApproved[Emit matching-approved event<br/>diagram 04]
+    NotifApproved --> NotifyAll[Send email to all participants<br/>with their own assignment only]
+    NotifyAll --> Done([Assignments live])
+
+    %% Post-approval override path per FR-8
+    Done --> Override{Admin override<br/>after approval FR-8}
+    Override -- Yes --> OverrideOps[Admin edits approved match<br/>move/unassign/lock]
+    OverrideOps --> AuditPost[Audit log post-approval override]
+    AuditPost --> DiffAffected[Compute diff<br/>affected participants only]
+    DiffAffected --> NotifChange[Emit match-changed event<br/>diagram 04]
+    NotifChange --> NotifyAffected[Send email ONLY to<br/>affected participants]
+    NotifyAffected --> Override
+
+    Override -- No --> Stay([Session remains Approved])
+
+    classDef fail fill:#fee,stroke:#c33
+    class Deny,StateError,ApproveErr fail
+    classDef success fill:#efe,stroke:#3a3
+    class Done,Stay success
