@@ -1,3 +1,8 @@
+> **Amendment pointer (Phase 2 housekeeping):** This spec is v3.0 and already incorporates
+> the resolutions below. This banner is an at-a-glance overlay, not a content fix.
+> Superseding ADRs: ADR-0001 (multi-table DynamoDB, supersedes single-table assumption),
+> ADR-0008 (deferred notification delivery, supersedes synchronous email). See `docs/adr/`.
+
 # Carpool Matching Application — Functional Requirements & Solution Architecture (v3)
 
 ## Version
