@@ -1,0 +1,49 @@
+%% Session Lifecycle — Carpool Coordinator Phase 1
+%% Covers FR-2 (Session Management) and FR-8 (Manual Override after approval)
+%% Status states: draft → registration_open → matching_pending → matching_proposed → approved → closed
+%% Per API §1.8 all enum values are snake_case.
+
+stateDiagram-v2
+    [*] --> draft : Manager or Superuser<br/>creates session<br/>POST /sessions
+
+    draft --> registration_open : Session Admin<br/>opens registration<br/>PATCH status
+    registration_open --> matching_pending : Registration deadline passes<br/>or Admin closes registration
+    registration_open --> closed : Session Admin or Manager<br/>cancels session
+
+    matching_pending --> matching_proposed : Admin runs matching<br/>POST /match/run<br/>writes MATCH#Vn+1
+    matching_pending --> registration_open : Admin re-opens<br/>registration
+
+    matching_proposed --> matching_proposed : Admin edits manually<br/>FR-8 move/unassign/lock<br/>PATCH /match/manual
+    matching_proposed --> matching_pending : Admin discards proposal<br/>and re-runs matching
+    matching_proposed --> approved : Admin approves<br/>POST /match/approve<br/>selects exactly one version
+    matching_proposed --> closed : Session cancelled
+
+    approved --> approved : Admin overrides match AFTER approval<br/>FR-8 move/unassign/lock<br/>triggers notifications to affected participants
+    approved --> closed : Admin or Manager<br/>closes session after event date
+    approved --> matching_pending : Admin force rematch<br/>creates new MATCH#Vn+1
+
+    closed --> [*]
+
+    note right of draft
+        Session defined but<br/>not yet accepting<br/>registrations. Anchor<br/>location and times set.
+    end note
+
+    note right of registration_open
+        Drivers and Passengers<br/>can submit / update<br/>registrations until<br/>registration_deadline.
+    end note
+
+    note right of matching_pending
+        Locked roster.<br/>Matching engine<br/>preparing proposal.
+    end note
+
+    note right of matching_proposed
+        Hidden from participants.<br/>Admin reviews and edits.<br/>Versioned as MATCH#V1 V2 ...
+    end note
+
+    note right of approved
+        Selected version published.<br/>Participants see only their<br/>own assignment per FR-9.
+    end note
+
+    note right of closed
+        Terminal state.<br/>No further edits.
+    end note

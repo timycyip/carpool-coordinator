@@ -6,7 +6,17 @@ deployed to AWS, with the Next.js frontend bootstrapped on Cloudflare Pages.
 
 ---
 
-## Progress & Decision Log
+## Phase 1 Review Advisories (carried forward)
+
+These advisories from the Phase 1 consolidated review must be addressed during Phase 2.
+
+| Priority | ID | Advisory | Owner |
+|----------|----|----------|-------|
+| **Week 1** | A1 | `plans/phase-1-discovery.md` Decisions section still references stale pre-ADR decisions (single consolidated table, synchronous email). Add an ADR supersession banner at the top of the plan. | Task 2.1 |
+| **Week 1** | A3 | `KNOWLEDGE.md` not created at repo root. AGENTS.md §17 requires it after first task wrap-up. Capture: ADR-0001 multi-table rationale, ADR-0008 deferred-delivery reversal, canonical schema supremacy principle. | Task 2.1 |
+| **Week 1** | A5 | `docs/functional_requirements_and_architecture.md` (master spec) §10 lists 4 tables (now 5 per ADR-0001) and §13/§14 describe synchronous email (now deferred per ADR-0008). Add an amendment banner at the top of the spec listing superseding ADRs. | Task 2.1 |
+| **Phase 2** | A7 | `gsi_latest_match_by_session` in the ERD is architecturally redundant — the main-table Query on `SESSION#<code>` + `SK begins_with MATCH#` returns the same data at identical cost. During Task 2.2, evaluate: drop the GSI or document the cost-benefit rationale. | Task 2.2 |
+| **Phase 2** | A9 | NFR-SCALE-2 states "idle cost = $0" — literally false (CloudWatch Logs ingestion is never zero). Reword to "≤ $1/month idle" or define a measurement window in `docs/requirements_baseline.md` §5.3. | Task 2.10 |
 
 > **Status as of 2026-06-23:** SPECIFY gate complete. All blocking open questions resolved
 > by human review. Phase 2 implementation is **gated on Phase 1 Discovery completing**

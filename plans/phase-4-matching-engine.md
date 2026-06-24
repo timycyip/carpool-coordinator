@@ -2,11 +2,24 @@
 
 Builds on Phase 3 (registrations with geocoded locations). Most complex phase. Goal: a CVRPTW-based greedy matching engine producing versioned proposed matches, with admin review/edit UI.
 
+---
+
+## Phase 1 Review Advisories (carried forward)
+
+These advisories from the Phase 1 consolidated review must be addressed during Phase 4.
+
+| Priority | ID | Advisory | Owner |
+|----------|----|----------|-------|
+| **Phase 4** | A8 | NFR-PERF-2 targets "Matching < 30s for 500 users" but the MVP greedy solver caps at <300 users per the spec. The 500-user NFR is untestable on the MVP solver. Resolution: lower the NFR to 300 users for MVP and add a post-MVP NFR for 500 users in Phase 6. Update `docs/requirements_baseline.md` NFR-PERF-2. | Planning |
+| **Anytime** | A6 | Broken link in `docs/requirements_baseline.md` Appendix A: `plans/phase-4-matching.md` should be `plans/phase-4-matching-engine.md`. Fix the link. | Planning |
+
+---
+
 ## Open Questions (to refine)
 - [ ] Cost-function weights (distance/time/load): default values? Make configurable per session or global?
 - [ ] Detour feasibility threshold: absolute (km) or relative (× direct distance)?
 - [ ] When capacity is insufficient for all passengers, what's the policy — leave unmatched and flag, or overfill with warning? Recommend: leave unmatched + flag in admin UI.
-- [ ] Should the engine support return trips (`FROM_ORIGIN`) in MVP or only `TO_DESTINATION`? Recommend `TO_DESTINATION` only in MVP; `FROM_ORIGIN` separate solve deferred.
+- [x] ~~Should the engine support return trips (`FROM_ORIGIN`) in MVP or only `TO_DESTINATION`?~~ → **RESOLVED (OQ-7):** `TO_DESTINATION` only for MVP. `FROM_ORIGIN` deferred post-MVP.
 - [ ] Determinism: should the same input always produce the same proposed match (seeded)? Recommend yes for auditability.
 
 ## Goal

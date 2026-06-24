@@ -1,0 +1,88 @@
+%% Notification Fan-Out (Deferred) — Carpool Coordinator Phase 1
+%% Per ADR-0008: notifications are queued, not sent synchronously in the API request path.
+%% Covers FR-10 (Notifications via email) using the deferred delivery model.
+
+sequenceDiagram
+    autonumber
+    participant U as User / Admin
+    participant FE as Next.js Frontend
+    participant API as FastAPI on Lambda<br/>API Lambda
+    participant DDB as DynamoDB<br/>app_data
+    participant SQS as SQS Queue
+    participant EMAIL as Email Consumer<br/>Lambda
+    participant GRAPH as Microsoft Graph API<br/>sendMail
+    participant EX as M365 Exchange
+    participant INBOX as Recipient Inbox
+
+    rect rgb(230, 245, 255)
+    note over U,API: Trigger 1 — Registration success (FR-10)
+    U->>FE: Submit registration form
+    FE->>API: POST /sessions/CODE/register
+    API->>DDB: Put REG#user_sub item
+    DDB-->>API: OK
+    API->>DDB: Write notification_pending<br/>PK NOTIF#&lt;date&gt; SK &lt;ts&gt;#&lt;event_id&gt;
+    DDB-->>API: OK
+    API-->>FE: 201 Created<br/>notifications_pending: true
+    end
+
+    rect rgb(230, 255, 230)
+    note over U,API: Trigger 2 — Match approved (FR-10)
+    U->>FE: Admin clicks Approve &amp; publish
+    FE->>API: POST /sessions/CODE/match/approve<br/>{ "version": 2, "publish": true }
+    API->>DDB: Update MATCH#Vn status=approved
+    API->>DDB: Write notification_pending x N<br/>one per assigned participant
+    DDB-->>API: OK
+    API-->>FE: 200 OK<br/>publish: true, notifications_queued: 30
+    end
+
+    rect rgb(255, 245, 230)
+    note over U,API: Trigger 3 — Match changed after approval (FR-8 + FR-10)
+    U->>FE: Admin edits approved match
+    FE->>API: PATCH /sessions/CODE/match/manual
+    API->>DDB: Update MATCH#Vn items<br/>+ append AUDIT#DATE row
+    API->>API: Compute diff vs previous version<br/>identify affected participants only
+    API->>DDB: Write notification_pending x K<br/>K = count of affected
+    API-->>FE: 200 OK<br/>notifications_queued: K
+    end
+
+    rect rgb(255, 230, 230)
+    note over U,API: Trigger 4 — Session cancelled (FR-10)
+    U->>FE: Admin cancels session
+    FE->>API: PATCH /sessions/CODE status=closed<br/>reason=cancelled
+    API->>DDB: Update session status
+    API->>DDB: Write notification_pending x N<br/>all registered participants + admins
+    API-->>FE: 200 OK<br/>notifications_queued: N
+    end
+
+    rect rgb(245, 245, 245)
+    note over SQS,INBOX: Async delivery — SQS consumer drains notification_pending items
+    SQS->>EMAIL: Deliver message (poll / event source)
+    EMAIL->>DDB: Query notification_pending items
+    DDB-->>EMAIL: Items
+    loop for each pending item
+        EMAIL->>GRAPH: POST /me/sendMail<br/>Authorization Bearer Graph token
+        alt success
+            GRAPH->>EX: SMTP relay
+            EX->>INBOX: Deliver email
+            EMAIL->>DDB: Mark item status=sent
+        else transient failure (5xx / 429)
+            GRAPH-->>EMAIL: Error
+            EMAIL->>EMAIL: Retry with exp backoff<br/>(3 attempts)
+            alt retries exhausted
+                EMAIL->>DDB: Mark item status=failed<br/>(visible to admin)
+            end
+        end
+    end
+    end
+
+    rect rgb(235, 235, 255)
+    note over U,API: Manual re-send (admin trigger)
+    U->>FE: Admin clicks "Retry failed notifications"
+    FE->>API: POST /sessions/CODE/admin/notify<br/>{ "action": "send" }
+    API->>DDB: Re-queue failed items as notification_pending
+    API-->>FE: 200 OK<br/>notifications_queued: &lt;count&gt;
+    end
+
+    note over API,DDB: API returns 200 immediately after writing notification_pending.<br/>Email delivery never blocks the user-facing request path.<br/>Queue write failures return 503 to the caller (FR-10 reliability).
+
+    note over GRAPH,INBOX: Deferred channels (future phases):<br/>SMS via Twilio<br/>WhatsApp via WhatsApp Business API<br/>Mobile push via APNs and FCM

@@ -13,11 +13,11 @@ Convert the v2 requirements doc into implementation-ready artifacts: signed-off 
 
 ## Decisions (locked)
 - Full-stack plans: Next.js (App Router) on Cloudflare Pages + FastAPI on Lambda ARM64.
-- Single DynamoDB table `app_data` (consolidated; rate-limit + cache items use TTL).
+- Multi-table DynamoDB per data model: `app_data` (single-table PK/SK pattern internally for business entities) + separate `session_cache`, `rate_limit_cache`, `brute_force_counter`, `geocode_cache` tables (see [ADR-0001](docs/adr/0001-table-naming-by-data-model.md)). Rate-limit + cache items use TTL.
 - Google OIDC global identity; session code = registration invite; multi-session per user.
 - Public Nominatim (geocode, cached in app_data) + OpenRouteService free-tier API (matrix/route).
-- Greedy matching MVP, sync in Lambda.
-- Email sent synchronously from API Lambda via Microsoft Graph `sendMail` → M365 Exchange.
+- Greedy matching MVP, sync in Lambda (`TO_DESTINATION` only; `FROM_ORIGIN` deferred post-MVP).
+- Email delivery **deferred**: API Lambda writes `notification_pending` items to DynamoDB; a separate processor (SQS → email Lambda or admin-triggered batch) sends emails via Microsoft Graph `sendMail` → M365 Exchange. This avoids blocking the API response on email delivery. See ADR-0008.
 
 ## Tasks (ordered)
 

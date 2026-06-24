@@ -4,6 +4,20 @@
 
 Builds on Phases 2–5 (fully functional platform). Goal: production readiness — load testing, security review, observability, rate-limit tuning, and abuse detection, plus frontend resilience.
 
+---
+
+## Phase 1 Review Advisories (carried forward)
+
+No Phase 1 advisories directly target Phase 6. However, Phase 6 is the home for post-MVP scope items referenced by earlier advisories:
+
+| Source | Item | Notes |
+|--------|------|-------|
+| A8 | NFR-PERF-2 500-user matching target | Phase 4 narrows MVP to 300 users. Phase 6 should re-validate at 500 users once the production solver (OR-Tools / LP) replaces the greedy heuristic. |
+| OQ-3 | Compliance (PIPEDA/GDPR) | Deferred to post-MVP. If activated, add right-to-delete endpoints, data portability, and consent tracking here. |
+| FR-10 | SMS/WhatsApp/push notifications | Deferred to post-MVP per spec v2 §5. |
+
+---
+
 ## Open Questions (to refine)
 - [ ] Load test targets: confirm expected peak (5000 req/min per NFR) and session sizes for matching stress (100/300/500 users)?
 - [ ] Security review: internal review only, or external penetration test? If external, what scope/budget?
