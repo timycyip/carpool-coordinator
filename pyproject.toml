@@ -10,6 +10,7 @@ dependencies = [
     "fastapi",
     "mangum",
     "uvicorn[standard]",
+    "boto3",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +21,8 @@ dev = [
     "ruff",
     "mypy",
     "httpx",
+    "moto[dynamodb]",
+    "boto3-stubs[dynamodb]",
 ]
 
 [tool.hatch.build.targets.wheel]

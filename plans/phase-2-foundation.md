@@ -592,23 +592,23 @@ A1, A3, A5 (housekeeping edits to existing docs).
 role-based routing scaffold. This is the frontend foundation that all UI tasks build on.
 
 **Acceptance criteria:**
-- [ ] `npx create-next-app@latest frontend --typescript --tailwind --app --src-dir` creates the project
-- [ ] `@cloudflare/next-on-pages` installed and configured (`next.config.ts` with `setupDevPlatform()`)
-- [ ] `wrangler.toml` created with `compatibility_date`, `name = "carpool-coordinator"`, and a `pages_build_output_dir` pointing to `.vercel/output/static`
-- [ ] `frontend/src/lib/api-client.ts` exports a typed `apiClient` with `get<T>`, `post<T>`, `patch<T>`, `del` methods that inject `Authorization: Bearer ${token}` from the auth context
-- [ ] `frontend/src/lib/auth-context.tsx` exports `AuthProvider` (React Context) wrapping the app; stores JWT in-memory (never `localStorage` — ADR-0002); exposes `{ user, token, isAuthenticated, login, logout }`
-- [ ] `frontend/src/lib/route-guard.tsx` exports `ProtectedRoute` component that redirects to `/login` if `!isAuthenticated`
-- [ ] `frontend/src/app/layout.tsx` wraps children in `AuthProvider` + includes a role-aware `<Nav />` component
-- [ ] `frontend/src/components/Nav.tsx` shows different links per `user.global_role` (Superuser: all links; Manager: sessions, audit; otherwise: register, dashboard)
-- [ ] `npm run build` succeeds without errors
-- [ ] `npm run dev` serves the app at `localhost:3000`
+- [x] `npx create-next-app@latest frontend --typescript --tailwind --app --src-dir` creates the project
+- [x] `@cloudflare/next-on-pages` installed and configured (`next.config.ts` with `setupDevPlatform()`)
+- [x] `wrangler.toml` created with `compatibility_date`, `name = "carpool-coordinator"`, and a `pages_build_output_dir` pointing to `.vercel/output/static`
+- [x] `frontend/src/lib/api-client.ts` exports a typed `apiClient` with `get<T>`, `post<T>`, `patch<T>`, `del` methods that inject `Authorization: Bearer ${token}` from the auth context
+- [x] `frontend/src/lib/auth-context.tsx` exports `AuthProvider` (React Context) wrapping the app; stores JWT in-memory (never `localStorage` — ADR-0002); exposes `{ user, token, isAuthenticated, login, logout }`
+- [x] `frontend/src/lib/route-guard.tsx` exports `ProtectedRoute` component that redirects to `/login` if `!isAuthenticated`
+- [x] `frontend/src/app/layout.tsx` wraps children in `AuthProvider` + includes a role-aware `<Nav />` component
+- [x] `frontend/src/components/Nav.tsx` shows different links per `user.global_role` (Superuser: all links; Manager: sessions, audit; otherwise: register, dashboard)
+- [x] `npm run build` succeeds without errors
+- [x] `npm run dev` serves the app at `localhost:3000`
 
 **Verification:**
-- [ ] `cd frontend && npm run build` — succeeds
-- [ ] `cd frontend && npm run lint` — clean
-- [ ] `cd frontend && npx tsc --noEmit` — clean
-- [ ] Manual: `npm run dev` → landing page renders at `localhost:3000`
-- [ ] Manual: Cloudflare Pages preview deploy URL accessible (requires Cloudflare API token; may be deferred to Task 2.10)
+- [x] `cd frontend && npm run build` — succeeds
+- [x] `cd frontend && npm run lint` — clean
+- [x] `cd frontend && npx tsc --noEmit` — clean
+- [x] Manual: `npm run dev` → landing page renders at `localhost:3000`
+- [x] Manual: Cloudflare Pages preview deploy URL accessible (requires Cloudflare API token; may be deferred to Task 2.10)
 
 **Dependencies:** None (can start in parallel with all backend tasks)
 
