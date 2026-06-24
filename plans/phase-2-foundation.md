@@ -477,17 +477,17 @@ Rate-limit counters and geocode-cache items live in their own cache/counter tabl
 attributes, not inside the application data table.
 
 **Acceptance criteria:**
-- [ ] Terraform provisions all DynamoDB tables defined in the Phase 1 ERD with correct key schemas
-- [ ] `app/repositories/` implements base repository + User, Session, Registration, Match, Audit repos
-- [ ] GSIs from the ERD created (e.g., `sessions-by-user`, `registrations-by-session`, `latest-match-by-session`)
-- [ ] TTL attributes configured on rate-limit + geocode-cache + brute-force counter tables per ERD
-- [ ] PITR enabled on durable application-data tables per ERD
-- [ ] Repository unit tests pass against a local DynamoDB (docker) or moto mock
+- [x] Terraform provisions all DynamoDB tables defined in the Phase 1 ERD with correct key schemas
+- [x] `app/repositories/` implements base repository + User, Session, Registration, Match, Audit repos
+- [x] GSIs from the ERD created (e.g., `sessions-by-user`, `registrations-by-session`, `latest-match-by-session`)
+- [x] TTL attributes configured on rate-limit + geocode-cache + brute-force counter tables per ERD
+- [x] PITR enabled on durable application-data tables per ERD
+- [x] Repository unit tests pass against a local DynamoDB (docker) or moto mock
 
 **Verification:**
-- [ ] Tests pass: `pytest tests/repositories/ -v`
-- [ ] Terraform apply succeeds to a dev account: `cd infra && terraform plan && terraform apply`
-- [ ] Manual check: put/get a User item and a Session item via repository
+- [x] Tests pass: `pytest tests/repositories/ -v`
+- [x] Terraform apply succeeds to a dev account: `cd infra && terraform plan && terraform apply`
+- [x] Manual check: put/get a User item and a Session item via repository
 
 **Dependencies:** Task 2.1, **Phase 1 ERD (`docs/data_model_erd.md`)**
 

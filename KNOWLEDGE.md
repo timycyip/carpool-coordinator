@@ -71,3 +71,57 @@ Full table: `docs/requirements_baseline.md` §4.
 - **Model-only code needs import tests:** Pydantic models that aren't used by any endpoint
   yet (e.g., `ErrorResponse`) still count toward coverage. Add unit tests that construct
   and validate the models directly (see `tests/test_models.py`).
+
+---
+
+## Task 2.2 — DynamoDB Schema + Repository Layer (2026-06-24)
+
+### Design Decisions
+
+- **Sync boto3, async interface:** Repositories use sync `boto3` client internally but
+  expose `async def` methods. This keeps the interface compatible with FastAPI's async
+  endpoints while avoiding `aioboto3` complexity. The brief blocking is acceptable at MVP
+  scale (Lambda invocations are isolated; each call is <1ms).
+
+- **`TypeSerializer`/`TypeDeserializer` for DynamoDB JSON:** The base repository
+  auto-serializes plain Python dicts to DynamoDB JSON format and deserializes responses
+  back. This gives callers a clean Python-dict API without manual type-descriptor
+  boilerplate (`{"S": "value"}`).
+
+- **`Decimal`→`int`/`float` conversion:** DynamoDB's `TypeDeserializer` returns
+  `Decimal` for numbers. The base repository converts these to `int` (if no fractional
+  part) or `float` so callers don't need to handle `Decimal` serialization in JSON
+  responses.
+
+- **Advisory A7 — `gsi_latest_match_by_session` not provisioned:** The ERD §3.3 GSI is
+  redundant. A main-table Query with `ScanIndexForward=False, Limit=1` on the same
+  partition returns identical results at the same cost. The GSI is omitted from Terraform;
+  the comment in `MatchRepository.get_latest()` records the rationale.
+
+- **Zero-padded match version SKs:** `MATCH#V0001`, `MATCH#V0002`, etc. (4-digit padding)
+  ensures lexicographic sort order matches numeric order for DynamoDB's `ScanIndexForward`
+  behavior. Breaks at V10000+ (5 digits) — acceptable for MVP.
+
+### Technical Notes
+
+- **moto 5.x uses `mock_aws`:** The older `mock_dynamodb` context manager was consolidated
+  into `mock_aws` in moto 5.0. All test fixtures use `@mock_aws` (or `with mock_aws()`).
+
+- **moto table creation requires all GSI key attributes:** When creating a table with GSIs
+  in moto, all attributes used as GSI hash/range keys must be listed in the table's
+  `AttributeDefinitions`, even though DynamoDB itself only requires definitions for key
+  attributes. Moto enforces this at create time.
+
+- **pytest-asyncio `mode = "auto"`:** All async test functions are collected and run
+  automatically without explicit `@pytest.mark.asyncio` decorators, but we include them
+  for clarity and compatibility with stricter pytest-asyncio versions.
+
+- **Task 2.1 branch merge required:** This worktree was based on `master` which lacked
+  the Task 2.1 scaffold. The `phase-2-task-2-1-backend-scaffold` branch was merged in
+  first (fast-forward). Future task branches should be created from the latest merged
+  state of their dependencies.
+
+- **Audit `query_audit` naming:** The audit repository method is named `query_audit`
+  (not `query`) to avoid shadowing the base class `query` method in the `super().query()`
+  call. Python's MRO would otherwise cause infinite recursion if the method were named
+  `query`.

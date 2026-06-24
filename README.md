@@ -100,7 +100,7 @@ app/                        Backend (FastAPI + Mangum → AWS Lambda)
   auth/                     Google OIDC verification
   services/                 Business logic
   repositories/             DynamoDB data access
-  middleware/                auth, rbac, rate_limit, audit
+  middleware/               auth, rbac, rate_limit, audit
 tests/                      pytest tests (mirrors app/ layout)
 src/                        Legacy CLI (untouched)
 test/                       Legacy unittest tests (untouched)
@@ -114,9 +114,9 @@ frontend/                   Next.js app — Phase 2+
 
 ### Key Design Decisions
 
-| Decision | ADR |
-|----------|-----|
-| DynamoDB tables named per data model (multi-table, not consolidated) | [ADR-0001](docs/adr/0001-table-naming-by-data-model.md) |
+| Decision | ADR / Doc |
+|----------|-----------|
+| DynamoDB table split and single-table `app_data` model | [Database Design](docs/database_design.md), [ADR-0001](docs/adr/0001-table-naming-by-data-model.md) |
 | App session JWT (not opaque tokens) | [ADR-0002](docs/adr/0002-app-session-jwt.md) |
 | AWS region = us-east-2 (Ohio) | [ADR-0003](docs/adr/0003-terraform-iac-us-east-2.md) |
 | Same-origin rewrites (Cloudflare → Lambda) | [ADR-0004](docs/adr/0004-same-origin-rewrites.md) |
