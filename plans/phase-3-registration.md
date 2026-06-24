@@ -4,6 +4,17 @@ Builds on Phase 2 (working auth + session CRUD + RBAC). Goal: users can register
 
 ---
 
+### Additional deferred items from Phase 2 review (2026-06-24)
+
+| Priority | ID | Item | Owner |
+|----------|----|------|-------|
+| **Phase 3** | D3-P2 | `session_cache` table contents and schema definition — table is provisioned in Phase 2 but contents are deferred here. Define PK/SK pattern and what transient state goes in it (candidates: hot "current approved match" pointer, registration-in-progress state, session-scoped feature flags). | Backend |
+| **Phase 3** | D3-P2 | Geocode cache key normalization — lock the normalization rule: uppercase, strip whitespace. Document handling for Canadian postal codes `A1A 1A1` and US ZIP+4 before implementation. | Backend |
+| **Phase 3** | D3-P2 | `GET /sessions/{code}/registrations` (admin roster view, RBAC E-21, V-02/V-03/V-05) — deferred from Phase 2. Implement after registration data model lands. | Backend + Frontend |
+| **Phase 3** | D3-P2 | AC-OQ-7 resolution: confirm `email` field in `RegistrationCreate` must match the authenticated Google email exactly (not merely the domain). Current draft defaults to exact match; lock during Phase 3 implementation. | Backend |
+
+---
+
 ## Phase 1 Review Advisories (carried forward)
 
 These advisories from the Phase 1 consolidated review must be addressed during Phase 3.

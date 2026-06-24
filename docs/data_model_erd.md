@@ -66,6 +66,10 @@ table is a different (and complementary) concern from ADR-0001's multi-table dec
   - `name` (string)
   - `created_at` (ISO-8601 timestamp)
   - `global_roles` (list of string, e.g. `["manager"]`; `["superuser"]`; default `[]`)
+    **Note:** DynamoDB stores a list; the app session JWT (ADR-0002) encodes only the
+    highest-precedence role as a singular `global_role` claim. A user holds exactly one
+    global role in MVP scope — the list type is forward-compatible with multi-role users
+    post-MVP.
 - **Purpose:** Identity record for every Google-authenticated principal. Holds *global*
   roles only; session-scoped roles (Driver / Passenger / Session Admin) are on
   Registration / Session-Admin-Role items, never on the User.
@@ -75,16 +79,19 @@ table is a different (and complementary) concern from ADR-0001's multi-table dec
 - **PK:** `SESSION#<code>` where `<code>` is the short invite code
 - **SK:** `METADATA`
 - **Attributes:**
+  - `code` (string — **6‑char uppercase alphanumeric, server‑generated**, collision‑retry on insert)
   - `title` (string)
   - `description` (string)
-  - `trip_mode` (enum: `TO_DESTINATION` | `FROM_ORIGIN`)
+  - `trip_mode` (enum: `TO_DESTINATION` | `FROM_ORIGIN`; `FROM_ORIGIN` accepted but deferred post‑MVP — see OQ‑7)
   - `anchor_location` (map: `{ lat: number, lon: number }`) — destination or origin per trip_mode
+  - `capacity_hint` (integer, optional — suggested seat count for UI defaults; not enforced, Phase 2)
   - `earliest_pickup` (ISO-8601 timestamp)
   - `latest_arrival` (ISO-8601 timestamp)
   - `registration_deadline` (ISO-8601 timestamp)
   - `status` (enum: `draft` | `registration_open` | `matching_pending` | `matching_proposed` | `approved` | `closed`)
   - `created_by` (string — Google `sub` of creator)
   - `created_at` (ISO-8601 timestamp)
+  - `capacity_hint` (integer, optional — suggested default seat count for UI hints; no enforcement)
 - **Purpose:** Root of a carpool event. All session-scoped data (registrations, matches,
   admin roles) shares this PK.
 
@@ -120,9 +127,10 @@ table is a different (and complementary) concern from ADR-0001's multi-table dec
   numeric order.
 - **Attributes:**
   - `version` (integer — the numeric `n`)
-  - `assignments` (map: `{ "<driver_google_sub>": [ "<passenger_google_sub>", … ], … }`)
-    — empty list for a driver assigned no passengers; passengers with no driver are
-    recorded under a special key `__unmatched__` whose value is a list of passenger subs.
+  - `assignments` (list of objects: `[ { driver_sub, passenger_subs, pickup_order, locked }, … ]`)
+    — ordered by pickup sequence; `pickup_order` is 1-indexed; `locked` = true means the
+    driver's route is protected from auto re-match overwrite (FR-8)
+  - `unassigned` (list of strings — passenger subs not assigned to any driver)
   - `status` (enum: `proposed` | `approved`)
   - `created_at` (ISO-8601)
   - `created_by` (string — Google `sub` of admin who ran the algorithm or override)
@@ -137,7 +145,7 @@ table is a different (and complementary) concern from ADR-0001's multi-table dec
 **Per-driver denormalization decision (OPTIONAL items).** A `MatchAssignment` could be
 emitted as a separate item (`PK = SESSION#<code>`, `SK = ASSIGN#MATCH#V<n>#DRIVER#<sub>`)
 to make per-driver "who do I pick up" queries a single `GetItem` instead of a `Get` on
-the parent `MATCH#V<n>` plus map lookup. We **do not** denormalize at this stage.
+the parent `MATCH#V<n>` plus list scan. We **do not** denormalize at this stage.
 Rationale:
 
 - The match payload is small (≤500 participants → a single item well under DynamoDB's
@@ -147,8 +155,8 @@ Rationale:
   for negligible read benefit.
 - The hot path for "my assignment" is keyed by `(google_sub, session_code)`, which is
   already served by the `sessions-by-user` GSI → `GetItem` on `REG#<sub>` to learn the
-  user is registered, then `GetItem` on `MATCH#V<latest_approved>` to read just the
-  driver's list from the assignments map.
+  user is registered, then `GetItem` on `MATCH#V<latest_approved>` and an in-memory
+  filter to find the driver's assignment object from the `assignments` list.
 - A single-item model keeps the matching approval transaction to one item (`UpdateItem`
   on the `MATCH#V<n>` to flip `proposed` → `approved`), avoiding cross-item conditional
   writes.
@@ -491,18 +499,13 @@ erDiagram
 
 ---
 
-## 8. Open Questions / Follow-ups for Phase 2
+## 8. Open Questions / Follow-ups (Resolved 2026-06-24)
 
-- **Session cache contents** — what specifically goes in `session_cache`? Phase 2 Task
-  2.x should enumerate. Candidates: hot "current approved match per session" pointer
-  (so the participant "my assignment" view avoids the GSI2 filter), or short-lived
-  registration-in-progress state.
-- **Geocode cache key normalization** — Phase 3 must lock the normalization
-  (uppercase, strip whitespace, handle Canadian postal codes `A1A 1A1`, US ZIP+4).
-- **Audit-log retention** — spec implies 30-day S3 archive, but no clear policy on
-  active-DynamoDB retention. Proposal: retain 90 days hot in `app_data`, then export
-  to S3 and (optionally) delete from DynamoDB. **Requires human approval (DB schema).**
-- **GSI write cost** — `gsi_sessions_by_user` projects every Registration write.
-  Acceptable at MVP scale; revisit if write volume grows.
-- **`session_cache` table definition** — not enumerated in this ERD because Phase 2 has
-  not finalized the contents. Will be added when defined.
+| Question | Resolution | Phase |
+| --- | --- | --- |
+| **Session cache contents** — what specifically goes in `session_cache`? Candidates: hot "current approved match per session" pointer, or short-lived registration-in-progress state. | **Deferred to Phase 3.** Not needed by any Phase 2 code path. Added to Phase 3 task list. | Phase 3 |
+| **Geocode cache key normalization** — Phase 3 must lock the normalization (uppercase, strip whitespace, handle Canadian postal codes `A1A 1A1`, US ZIP+4). | Carried forward to Phase 3. Already called out in `plans/phase-3-registration.md`. | Phase 3 |
+| **Audit-log retention** — spec implies 30-day S3 archive, but no clear policy on active-DynamoDB retention. Original proposal was 90 days; revised per human decision. | **30 days hot in DynamoDB** (matches S3 lifecycle + idle cost constraint ≤ $1/month). After 30 days, data is in S3 only (queryable via Athena per NFR-OPS-3). Requires human approval for DB schema changes per AGENTS.md §12. | Phase 6 |
+| **GSI write cost** — `gsi_sessions_by_user` projects every Registration write. Acceptable at MVP scale; revisit if write volume grows. | Carried forward to Phase 6 hardening. | Phase 6 |
+| **`session_cache` table definition** — not enumerated in this ERD because Phase 2 has not finalized the contents. | **Deferred to Phase 3.** Table is provisioned in Phase 2 (Task 2.2, Terraform); schema definition added in Phase 3 when contents are finalized. | Phase 3 |
+| **`idempotency` table** — referenced in `docs/api_contracts.md` §1.6 for `POST /match/run` idempotency but not enumerated in ERD §1. | **Deferred to Phase 4.** Table definition (PK=`IDEMPOTENCY#<sub>#<session>#<key>`, SK=`METADATA`, TTL=24h) added in Phase 4 when the matching engine endpoint is implemented. Not provisioned in Phase 2. | Phase 4 |
