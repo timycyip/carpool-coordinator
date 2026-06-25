@@ -155,11 +155,13 @@ class RateLimiter:
         window_start: int,
         window_seconds: int,
         limit: int,
-    ) -> int:
-        """Atomically increment the counter for ``pk``.
+    ) -> None:
+        """Atomically increment the counter for ``pk`` (fire-and-forget).
 
-        Returns the new counter value on success. Raises
-        :class:`RateLimitExceeded` when the bucket is full.
+        Raises :class:`RateLimitExceeded` when the bucket is full.
+        The return value of ``UpdateItem`` is intentionally discarded —
+        the caller only needs a pass/fail signal, which is delivered
+        via the exception path.
         """
         ttl = int(self._now()) + window_seconds + _TTL_GRACE_SECONDS
         try:
@@ -190,15 +192,6 @@ class RateLimiter:
                     scope="ip" if pk.startswith("RATELIMIT#ip:") else "user",
                 ) from exc
             raise
-
-        resp = self._client.get_item(
-            TableName=self._table,
-            Key={"PK": {"S": pk}, "SK": {"S": str(window_start)}},
-            ConsistentRead=True,
-        )
-        item = resp.get("Item") or {}
-        raw = item.get("count", {}).get("N", "0")
-        return int(raw)
 
     def check(self, ip: str, user_sub: str | None = None) -> None:
         """Charge one request against the IP bucket (and user bucket if any).
