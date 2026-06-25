@@ -244,3 +244,138 @@ Full table: `docs/requirements_baseline.md` §4.
   and the existing `frontend/src/lib/types.ts`). The Task 2.3 spec mentioned
   `token` but that would have broken the established contract — kept the
   contract-aligned name.
+
+---
+
+## Task 2.4 — RBAC Middleware (2026-06-24)
+
+### Role IntEnum design (ADR-0011)
+
+- `Role` is an `IntEnum` with precedence weights spaced 20 apart:
+  `PASSENGER=0, DRIVER=20, SESSION_ADMIN=40, MANAGER=60, SUPERUSER=80`.
+- `satisfies(required: Role) -> bool` checks `self >= required` — higher roles
+  automatically pass lower-role checks (Superuser passes everything).
+- `require_role(*allowed: Role)` is a FastAPI dependency factory that returns
+  `Depends(...)`. It reads the resolved `TokenPayload` from `get_current_user`,
+  computes the effective role set (global + session-scoped), and returns 403 if
+  none match.
+
+### Session-scoped RBAC
+
+- Session-scoped roles (Session Admin, Driver, Passenger) require a DynamoDB
+  lookup: `ADMIN#<sub>` or `REG#<sub>` under `SESSION#<code>` partition.
+- `compute_effective_roles(payload, session_code)` unions global role with any
+  session-scoped roles. If no `session_code`, only global role applies.
+- **Deny-default:** every protected route must explicitly declare the required
+  role via `Depends(require_role(...))`. No implicit allowances.
+
+### `CurrentUser` type alias
+
+- Defined in `app/middleware/auth.py` as
+  `Annotated[TokenPayload, Depends(get_current_user)]`.
+- Enables concise dependency injection in route signatures:
+  `async def route(user: CurrentUser, rbac: Depends(require_role(Role.MANAGER)))`.
+
+---
+
+## Task 2.8 — Rate Limiting Middleware (2026-06-24)
+
+### DynamoDB token-bucket design (ADR-0012)
+
+- Atomic `UpdateItem` with `ADD count :inc` and `ConditionExpression:
+  attribute_not_exists(#ts) OR (#ts = :window_start AND #count <= :limit)`.
+- Per-IP bucket: PK=`RATELIMIT#IP#<ip>`, SK=`<window_start>`.
+- Per-user bucket: PK=`RATELIMIT#USER#<sub>`, SK=`<window_start>`.
+- TTL on `rate_limit_cache` table auto-expires old window records.
+
+### Hot-path optimization
+
+- **Removed unnecessary `GetItem`:** The initial implementation did a `GetItem`
+  to check the current count before the `UpdateItem`. This was unnecessary —
+  DynamoDB's `UpdateItem` with `ConditionExpression` handles the check
+  atomically. Removed in commit `5a11522`.
+- `ReturnValues="UPDATED_NEW"` returns post-increment count for the response.
+
+### `Retry-After` and rate-limit headers
+
+- 429 response includes `Retry-After`, `X-RateLimit-Limit`,
+  `X-RateLimit-Remaining`, `X-RateLimit-Reset` per API contracts §1.4.
+- Window size is configurable: `RATE_LIMIT_WINDOW_IP` (default 60s),
+  `RATE_LIMIT_WINDOW_USER` (default 60s).
+
+### Abuse detection deferred
+
+- `brute_force_counter` table is provisioned but no code writes to it yet.
+  Post-MVP: track consecutive auth failures, escalate to IP ban.
+
+---
+
+## Task 2.9 — Audit Logging Middleware (2026-06-24)
+
+### Fire-and-forget writes (ADR-0013)
+
+- `AuditLogger.log()` dispatches DynamoDB writes via `asyncio.create_task` —
+  the API response never waits on audit persistence.
+- Failed audit writes are caught and logged to stderr; they never propagate
+  to the caller.
+- PK=`AUDIT#<YYYY-MM-DD>`, SK=`<event_id>` (UUIDv4). Daily partition for
+  bounded scans.
+
+### `_SyncAuditLogger` test pattern
+
+- The fire-and-forget pattern is inherently non-deterministic in tests.
+  `_SyncAuditLogger` subclass overrides `_dispatch_write()` to run the
+  coroutine synchronously in the main event loop.
+- Tests override `audit_dependency` via FastAPI's `dependency_overrides`
+  to inject the synchronous logger. `request.state.audit_logger` is then
+  accessible for test assertions.
+
+### `next_cursor` pagination bug (code review fix)
+
+- **Bug:** `next_cursor` used `raw_items[-1]["SK"]` — the last item of
+  the entire query (all events for the day), not the last *returned* item
+  after slicing. This caused pagination to skip rows when `limit < total`.
+- **Fix:** `next_cursor` now uses `last_sk` — the SK of the last item
+  actually returned in the current page.
+
+### RBAC on `GET /audit` (code review fix)
+
+- **Bug:** `GET /audit` was public (no `Depends(require_role(...))`).
+- **Fix:** Added `Depends(require_role(Role.MANAGER, Role.SUPERUSER))`.
+  Unauthenticated → 401, Passenger → 403.
+
+### Auth audit logging (code review fix)
+
+- **Missing:** `POST /auth/google` had no audit logging.
+- **Fix:** Writes `auth.login.success` (with `actor_sub`) on successful login
+  and `auth.login.failure` (with `reason` in details) on invalid token.
+
+---
+
+## Task 2.10 — CI/CD Pipelines (2026-06-25)
+
+### Three GitHub Actions workflows
+
+- **`backend-ci.yml`:** ruff check + ruff format check + mypy (strict) +
+  pytest with coverage. Build + deploy to Lambda on push to main.
+- **`frontend-ci.yml`:** eslint + tsc --noEmit + vitest. Build + deploy to
+  Cloudflare Pages on push to main.
+- **`terraform.yml`:** Plan on PR to main, plan + apply on push to main.
+  Uses `hashicorp/setup-terraform@v3`.
+
+### Terraform workflow fixes (code review)
+
+- **Bug:** PR plan job echoed "Terraform plan would run here" instead of
+  actually running `terraform plan`. Cloudflare OIDC provider + backend
+  config caused real plan to fail.
+- **Fix:** PR plan job now runs `terraform plan -input=false` with full
+  AWS credentials.
+- **Bug:** Apply job used `-var-file=dev.tfvars` which doesn't exist.
+- **Fix:** Removed `-var-file`. `variables.tf` defaults `environment` to
+  `"dev"` so no external var file is needed.
+
+### A9 advisory: NFR-SCALE-2 wording
+
+- Changed "idle cost = $0" to "≤ $1/month idle" in
+  `docs/requirements_baseline.md` §5.3 to account for CloudWatch Logs ingestion
+  (which is never zero).

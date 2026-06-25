@@ -1,4 +1,4 @@
-# ADR-0009: 401 Unauthorized Subscriber Pattern (api-client → auth-context bridge)
+# ADR-0010: 401 Unauthorized Subscriber Pattern (api-client → auth-context bridge)
 
 ## Status
 Accepted

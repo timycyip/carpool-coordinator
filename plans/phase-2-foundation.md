@@ -355,18 +355,24 @@ Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
 **ADRs (status):**
 | # | Decision | Status | File |
 |---|----------|--------|------|
-| ADR-0001 | Tables named per data model (reject single-table) | **LOCKED** | `docs/adr/0001-table-naming-by-data-model.md` (exists) |
-| ADR-0002 | App session = JWT (in-memory browser storage) | Accepted | `docs/adr/0002-app-session-jwt.md` (exists) |
-| ADR-0003 | IaC = Terraform; region = us-east-2 | Accepted | `docs/adr/0003-terraform-iac-us-east-2.md` (exists) |
-| ADR-0004 | Same-origin via CF Pages `rewrites()` | Accepted | `docs/adr/0004-same-origin-rewrites.md` (exists) |
-| ADR-0005 | Middleware order `rate_limit→audit→auth→rbac` | Accepted | `docs/adr/0005-middleware-ordering.md` (exists) |
-| ADR-0006 | Google JWKS cached in Lambda | Accepted | `docs/adr/0006-jwks-caching.md` (exists) |
-| ADR-0007 | DynamoDB on-demand capacity | Accepted | `docs/adr/0007-dynamodb-on-demand.md` (exists) |
+| ADR-0001 | Tables named per data model (reject single-table) | **LOCKED** | `docs/adr/0001-table-naming-by-data-model.md` |
+| ADR-0002 | App session = JWT (in-memory browser storage) | Accepted | `docs/adr/0002-app-session-jwt.md` |
+| ADR-0003 | IaC = Terraform; region = us-east-2 | Accepted | `docs/adr/0003-terraform-iac-us-east-2.md` |
+| ADR-0004 | Same-origin via CF Pages `rewrites()` | Accepted | `docs/adr/0004-same-origin-rewrites.md` |
+| ADR-0005 | Middleware order `rate_limit→audit→auth→rbac` | Accepted | `docs/adr/0005-middleware-ordering.md` |
+| ADR-0006 | Google JWKS cached in Lambda | Accepted | `docs/adr/0006-jwks-caching.md` |
+| ADR-0007 | DynamoDB on-demand capacity | Accepted | `docs/adr/0007-dynamodb-on-demand.md` |
+| ADR-0008 | Deferred notification delivery (SQS→Lambda) | Accepted | `docs/adr/0008-deferred-notification-delivery.md` |
+| ADR-0009 | Contract-first API design with shared error envelope | Accepted | `docs/adr/0009-contract-first-error-envelope.md` |
+| ADR-0010 | 401 unauthorized subscriber pattern (api-client→auth-context) | Accepted | `docs/adr/0010-unauthorized-subscriber-pattern.md` |
+| ADR-0011 | RBAC IntEnum + `require_role` factory with deny-default | Accepted | `docs/adr/0011-rbac-intenum-require-role.md` |
+| ADR-0012 | DynamoDB atomic token-bucket rate limiting | Accepted | `docs/adr/0012-dynamodb-token-bucket-rate-limit.md` |
+| ADR-0013 | Non-blocking audit writes + `_SyncAuditLogger` test pattern | Accepted | `docs/adr/0013-non-blocking-audit-sync-test-logger.md` |
 
 > ADR-0002 (auth posture) and ADR-0003 (IaC) require human-approval status recorded when written,
 > per AGENTS.md §12. ADR-0004..0007 are within existing patterns but must be recorded for
-> traceability. All ADR files should be created in the DOCUMENTATION phase of their owning task
-> (Task 2.2 → ADR-0001; Task 2.3 → ADR-0002/0006; Task 2.10 → ADR-0003/0007; Task 2.11 → ADR-0004).
+> traceability. ADR-0011..0013 were written in the DOCUMENTATION phase of Wave 3–4 (Tasks
+> 2.4/2.8/2.9) on 2026-06-25.
 
 ## Decisions (locked)
 - Backend: FastAPI + Mangum on Lambda ARM64 (Python 3.12, 256 MB, 5–10s timeout).
@@ -686,14 +692,14 @@ Tables are **named per data model** (ADR-0001). Also resolves advisory A7.
 
 ---
 
-### Checkpoint A: Foundation Complete
-- [ ] `uv run pytest tests/ -v` — all tests pass
-- [ ] `uv run ruff check . && uv run ruff format --check . && uv run mypy .` — all clean
-- [ ] `cd frontend && npm run build && npm run lint && npx tsc --noEmit` — all clean
-- [ ] `python -c "from app.main import handler"` — imports cleanly
-- [ ] Terraform plan shows no drift
-- [ ] Housekeeping: A1, A3, A5 resolved; KNOWLEDGE.md exists; master spec has ADR banner
-- [ ] **Review with human before proceeding**
+### Checkpoint A: Foundation Complete ✅ (all done as of 2026-06-25)
+- [x] `uv run pytest tests/ -v` — all tests pass (119 tests)
+- [x] `uv run ruff check . && uv run ruff format --check . && uv run mypy .` — all clean
+- [x] `cd frontend && npm run build && npm run lint && npx tsc --noEmit` — all clean
+- [x] `python -c "from app.main import handler"` — imports cleanly
+- [x] Terraform plan shows no drift
+- [x] Housekeeping: A1, A3, A5 resolved; KNOWLEDGE.md exists; master spec has ADR banner
+- [x] **Reviewed with human** — Phase 1 sign-off complete (PR #5)
 
 ---
 
@@ -803,11 +809,11 @@ resolution per `docs/rbac_matrix.md`. Every protected route declares required ro
 
 ---
 
-### Checkpoint B: Auth + RBAC Working
-- [ ] `uv run pytest tests/auth/ tests/middleware/test_rbac.py -v` — all pass
-- [ ] Manual: Google login → JWT in memory → protected route with Manager role → 200
-- [ ] Manual: Passenger JWT → Manager-only route → 403
-- [ ] **Review with human before building feature endpoints**
+### Checkpoint B: Auth + RBAC Working ✅ (all done as of 2026-06-25)
+- [x] `uv run pytest tests/auth/ tests/middleware/test_rbac.py -v` — all pass (31 tests)
+- [x] Manual: Google login → JWT in memory → protected route with Manager role → 200
+- [x] Manual: Passenger JWT → Manager-only route → 403
+- [x] **Reviewed with human** — merged into military-help
 
 ---
 
@@ -1125,16 +1131,18 @@ Pages with preview per branch). Also resolves advisory A9.
 
 ## Task Completion Tracker
 
+*Last updated: 2026-06-25*
+
 | Task | Status | Scope | Deps | Verification |
 |------|--------|-------|------|-------------|
-| 2.1 | ⬜ Pending | S | — | pytest, ruff, mypy, uvicorn smoke |
-| 2.11 | ⬜ Pending | M | — | npm build, lint, tsc |
-| 2.2 | ⬜ Pending | M | 2.1 | pytest repos, terraform plan |
-| 2.3 | ⬜ Pending | M | 2.2 | pytest auth, manual Google login |
-| 2.4 | ⬜ Pending | S | 2.3 | pytest rbac, manual 403 check |
+| 2.1 | ✅ Done | S | — | pytest, ruff, mypy, uvicorn smoke — PR #3 |
+| 2.11 | ✅ Done | M | — | npm build, lint, tsc — PR #4 |
+| 2.2 | ✅ Done | M | 2.1 | pytest repos (29 tests), terraform plan — PR #6 |
+| 2.3 | ✅ Done | M | 2.2 | pytest auth (9 tests), JWT+JWKS — merged |
+| 2.4 | ✅ Done | S | 2.3 | pytest rbac (22 tests: 16 e2e + 6 unit) — merged |
 | 2.5 | ⬜ Pending | M | 2.4 | pytest sessions, manual CRUD |
 | 2.7 | ⬜ Pending | S | 2.4, 2.5 | pytest admin, manual assign |
 | 2.6 | ⬜ Pending | S | 2.5 | pytest code validation, manual deep link |
-| 2.8 | ⬜ Pending | S | 2.2 | pytest rate limit, manual burst |
-| 2.9 | ⬜ Pending | S | 2.2 | pytest audit, manual query |
-| 2.10 | ⬜ Pending | M | 2.1, 2.3, 2.11 | CI green, manual deploy smoke |
+| 2.8 | ✅ Done | S | 2.2 | pytest rate limit (12 tests) — merged |
+| 2.9 | ✅ Done | S | 2.2 | pytest audit (11 tests) — merged |
+| 2.10 | ✅ Done | M | 2.1, 2.3, 2.11 | 3 CI workflows + README badges — merged |
