@@ -116,7 +116,7 @@ on 2026-06-24. All Phase 2-blocking findings were resolved in the close-out edit
 | Team Lead Agent | Reviewed | Phase 1 artifacts: PASS with 11 findings (2 blockers, 3 high, 6 medium). All blockers addressed in Phase 2 plan. | 2026-06-24 |
 | Product Owner Agent | Reviewed | Phase 1 artifacts: PASS with 4 conditions (wireframe scope annotations, success criterion splits, E-15/E-16 folded into PATCH). All conditions accepted and applied. | 2026-06-24 |
 | Business Analyst Agent | Reviewed | Phase 1 artifacts: CONDITIONAL with 4 blockers (endpoint mismatch, override literal mismatch, match shape mismatch, FR-5 OSRM/ORS conflict). All resolved: Phase 2-specific items fixed; Phase 4/5 items documented in respective phase plans. | 2026-06-24 |
-| Final Approver (Human) | Tim | Approved. All sign-off criteria met. Phase 2 cleared to proceed. | 2026-06-24 |</string>
+| Final Approver (Human) | Tim | Approved. All sign-off criteria met. Phase 2 cleared to proceed. | 2026-06-24 |
 
 **Sign-off criteria** (all met — 2026-06-24):
 
@@ -125,6 +125,21 @@ on 2026-06-24. All Phase 2-blocking findings were resolved in the close-out edit
 3. ✅ All Open Questions in §4 are either Resolved or explicitly Deferred with an owner and target date.
 4. ✅ The NFRs in the master spec v3.0 §6 have no rows marked "needs definition".
 5. ✅ The master spec v3.0 and this baseline are committed on the default branch and linked from the Phase 1 plan's validation checklist.
+
+### 5.3 NFR-SCALE-2 — Idle Cost (Advisory A9)
+
+**Resolution of A9.** Earlier draft text "Idle cost = $0" was factually wrong
+(CloudWatch Logs ingestion is never zero on an active AWS account). The wording is
+re-synced here from the master spec v3.0 §6.3 NFR-SCALE-2 to keep this baseline as
+the single sign-off record.
+
+| NFR ID | Requirement | Measurement window | Verification |
+| --- | --- | --- | --- |
+| **NFR-SCALE-2** | **Idle cost ≤ $1/month** | 30 consecutive days with zero user traffic | Monthly AWS Cost Explorer review: total charges for `carpool-dev` environment (Lambda invocations, DynamoDB on-demand, CloudWatch Logs ingestion/storage, S3, Parameter Store) ≤ $1.00. Excludes one-time data-transfer and KMS key charges outside the environment. |
+
+This wording supersedes any earlier "$0 idle" claim and matches the master spec.
+Task 2.10 (CI/CD pipelines) was used to land this clarification; the cost-review
+gate can be added to the SRE runbook in Phase 6.
 
 ---
 

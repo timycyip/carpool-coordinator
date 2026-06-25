@@ -174,3 +174,73 @@ Full table: `docs/requirements_baseline.md` §4.
 - Confirmed lowercase strings: `"superuser" | "manager" | "none"`. Nav role branching
   compares against lowercase. Source: `docs/api_contracts.md` §5 `GlobalRole` enum and
   §1.2 JWT claims.
+
+---
+
+## Task 2.3 — Google OIDC Authentication (Backend + Frontend Vertical Slice) (2026-06-24)
+
+### HTTPException envelope unwrapping
+
+- FastAPI's `HTTPException(detail=...)` renders the response as
+  `{"detail": <detail>}`. To match the API contract envelope `{"error": {...}}`,
+  register an exception handler in `app/main.py` that unwraps
+  `HTTPException(detail={"error": {...}})` and returns the inner dict directly.
+  All auth-related errors now use the canonical envelope without per-route
+  boilerplate.
+
+### JWKS caching
+
+- `app/auth/oidc.py` keeps the JWKS payload in a module-level `_cache` dict +
+  `_fetched_at` timestamp. `time.monotonic()` would be more correct (immune
+  to wall-clock jumps), but ADR-0006 specifies elapsed-time semantics that work
+  either way. A stale-key fallback test (`tests/auth/test_oidc.py`) exercises
+  the "fetch fails → serve from cache" branch by mutating `_cache.fetched_at`
+  and patching `_fetch_jwks` to raise `OSError`.
+- Fetch uses `urllib.request` instead of `httpx`/`aiohttp` to keep runtime deps
+  minimal. JWKS fetch is rare (once per ~hour per Lambda instance) so the
+  blocking call inside an `async def` is acceptable. If JWKS fetch latency
+  becomes a cold-start concern, swap to `httpx.AsyncClient`.
+
+### PyJWT + cryptography
+
+- `jwt.algorithms.RSAAlgorithm.from_jwk(...)` returns an `RSAPublicKey`
+  directly (not a private key). Use `.public_bytes(Encoding.PEM,
+  PublicFormat.SubjectPublicKeyInfo)` to serialize for `jwt.decode(...)`.
+- Earlier mistake: `.public_key().export_to_pem()` — `.public_key()` does not
+  exist on a public key, only on a private key.
+
+### PyJWT HS256 key length warning
+
+- PyJWT emits `InsecureKeyLengthWarning` for HMAC keys < 32 bytes. The
+  `test_wrong_secret_raises` fixture uses a 12-byte "wrong-secret" to
+  intentionally trigger the failure mode; the warning is suppressed by
+  test ordering, not silenced. Production secrets from Parameter Store are
+  always ≥ 32 bytes.
+
+### `@react-oauth/google` + `GoogleOAuthProvider`
+
+- The provider must wrap the entire app (not just the login page) — placed in
+  `frontend/src/app/layout.tsx`. If `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is unset,
+  the page renders a friendly "not configured" alert instead of crashing the
+  GIS button.
+- `frontend` package install requires `--legacy-peer-deps` because
+  `@cloudflare/next-on-pages@1.13.16` only declares peer support for Next ≤15,
+  while the project pins `next@16.2.9`. The Next 16 build works fine via
+  turbopack; only the legacy Pages adapter is incompatible (Phase 2 deploy
+  will pin Next 15.x for `pages:build`).
+
+### Test fixture sharing
+
+- Tests that need both a moto-mocked DynamoDB **and** the FastAPI app's
+  `app.dependency_overrides[get_ddb_client] = lambda: ddb_client` must depend
+  on the conftest's `ddb_client` fixture (not create a new `mock_aws()`
+  context). Otherwise the mocked tables aren't shared, and writes from one
+  side are invisible to the other. Pattern documented in
+  `tests/api/test_auth.py::auth_client`.
+
+### Field name alignment
+
+- Backend `GoogleAuthResponse` uses `access_token` (matching API contract §3.1
+  and the existing `frontend/src/lib/types.ts`). The Task 2.3 spec mentioned
+  `token` but that would have broken the established contract — kept the
+  contract-aligned name.

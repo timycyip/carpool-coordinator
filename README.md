@@ -1,5 +1,11 @@
 # Carpool Coordinator
 
+[![Backend CI](https://github.com/timycyip/carpool-coordinator/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/timycyip/carpool-coordinator/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/timycyip/carpool-coordinator/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/timycyip/carpool-coordinator/actions/workflows/frontend-ci.yml)
+[![Terraform](https://github.com/timycyip/carpool-coordinator/actions/workflows/terraform.yml/badge.svg)](https://github.com/timycyip/carpool-coordinator/actions/workflows/terraform.yml)
+[![Pylint](https://github.com/timycyip/carpool-coordinator/actions/workflows/pylint.yml/badge.svg)](https://github.com/timycyip/carpool-coordinator/actions/workflows/pylint.yml)
+[![UnitTest](https://github.com/timycyip/carpool-coordinator/actions/workflows/unittest.yml/badge.svg)](https://github.com/timycyip/carpool-coordinator/actions/workflows/unittest.yml)
+
 A carpool coordination platform for events — church gatherings, conferences, school
 activities, group trips. Automates ride registration, passenger-driver matching, route
 optimization, admin approval, and assignment publishing.

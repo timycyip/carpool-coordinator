@@ -45,16 +45,12 @@ export default function Home() {
         Coordinate carpools for your event — drivers, passengers, one shared
         session code.
       </p>
-      <button
-        type="button"
-        disabled
-        className="mt-6 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground opacity-50 transition-colors"
+      <Link
+        href="/login"
+        className="mt-6 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
       >
         Sign in with Google
-      </button>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Google sign-in available soon.
-      </p>
+      </Link>
     </main>
   );
 }
