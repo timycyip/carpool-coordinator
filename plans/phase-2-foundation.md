@@ -28,7 +28,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 | 1 | Phase 1 artifacts missing | **Complete Phase 1 first.** Phase 1 Discovery produces `docs/api_contracts.md`, `docs/data_model_erd.md`, `docs/rbac_matrix.md`, wireframes before any Phase 2 code. | Hard prerequisite; gates Task 2.2+ |
 | 2 | DynamoDB table strategy | **Tables named per data model** (NOT single-table consolidation). | ADR-0001 `docs/adr/0001-table-naming-by-data-model.md` |
 | 3 | App session mechanism | **JWT.** Backend issues a signed JWT after Google OIDC verification. Frontend stores in memory (not localStorage). | ADR-0002; human-confirmed 2026-06-23 |
-| 4 | IaC choice | **Terraform** (provisioned via GitHub Actions on merge to main). | ADR-0003; human-confirmed 2026-06-23 |
+| 4 | IaC choice | **Terraform** (GitHub-hosted runners using AWS OIDC federation; plan on PR, apply on main). | ADR-0003; human-confirmed 2026-06-23 |
 | 5 | AWS region | **`us-east-2`** (Ohio). | ADR-0003; human-confirmed 2026-06-23 |
 | 6 | Secrets store | **AWS Parameter Store** (per requirements doc §10). | Tasks 2.3, 2.10 |
 | 7 | Docs dir naming (`docs/` vs `doc/`) | **Open — to be settled in Phase 1.** AGENTS.md and this plan reference `doc/`; repo currently uses `docs/`. | Low risk; resolves with Phase 1 artifacts |
@@ -108,7 +108,7 @@ engine, email notifications, load testing, and production hardening (Phases 3–
 - AWS Lambda (ARM64, 256 MB, 5–10s timeout), DynamoDB (tables per data model — see ADR-0001)
 - `uv` (package manager), `ruff` (lint+format), `mypy --strict` (types), `pytest` (tests)
 - Google OIDC (identity) + app-issued **JWT** session (resolved 2026-06-23)
-- IaC: **Terraform** (provisioned via GitHub Actions) — region **`us-east-2`**
+- IaC: **Terraform** (GitHub-hosted runners using AWS OIDC federation) — region **`us-east-2`**
 
 **Frontend**
 - Node.js LTS, Next.js (App Router), TypeScript, Tailwind CSS
@@ -685,14 +685,14 @@ attributes, not inside the application data table.
 
 ### Task 2.10: CI/CD pipelines (backend + frontend) [MVP]
 
-**Description:** Set up GitHub Actions workflows for both backend and frontend. Backend: lint (ruff), type-check, unit tests, Lambda package + deploy on merge to main, plus **Terraform plan/apply** for infra (`us-east-2`). Frontend: build, type-check, deploy to Cloudflare Pages with preview per branch.
+**Description:** Set up GitHub Actions workflows for both backend and frontend. Backend: lint (ruff), type-check, unit tests, Lambda package + deploy on merge to main, plus **Terraform plan/apply** for infra (`us-east-2`) using GitHub-hosted runners and AWS OIDC federation. Frontend: build, type-check, deploy to Cloudflare Pages with preview per branch.
 
 **Acceptance criteria:**
 - [ ] Backend workflow runs on PR + push: ruff check, mypy, pytest, then Lambda zip + deploy on main
-- [ ] Terraform workflow runs on PR (plan) + on merge to main (apply) against `us-east-2`
+- [ ] Terraform workflow runs on PR (plan) + on merge to main (apply) against `us-east-2` via GitHub OIDC; PR jobs do not have apply trust
 - [ ] Frontend workflow runs on PR + push: tsc, build, then `wrangler pages deploy` on main
 - [ ] Preview deploys created per branch on Cloudflare Pages
-- [ ] Secrets (Google OAuth client, AWS creds, Cloudflare API token, JWT signing secret) stored as GitHub Actions secrets → Parameter Store in deployed env
+- [ ] Workflow config (Google OAuth client, AWS role ARN, Cloudflare API token, JWT signing secret) stored as GitHub Actions secrets / env; Terraform uses OIDC instead of long-lived AWS access keys
 - [ ] Workflow status badges added to README
 
 **Verification:**
