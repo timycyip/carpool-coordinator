@@ -28,7 +28,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 | 1 | Phase 1 artifacts missing | **Complete Phase 1 first.** Phase 1 Discovery produces `docs/api_contracts.md`, `docs/data_model_erd.md`, `docs/rbac_matrix.md`, wireframes before any Phase 2 code. | Hard prerequisite; gates Task 2.2+ |
 | 2 | DynamoDB table strategy | **Tables named per data model** (NOT single-table consolidation). | ADR-0001 `docs/adr/0001-table-naming-by-data-model.md` |
 | 3 | App session mechanism | **JWT.** Backend issues a signed JWT after Google OIDC verification. Frontend stores in memory (not localStorage). | ADR-0002; human-confirmed 2026-06-23 |
-| 4 | IaC choice | **Terraform** (provisioned via GitHub Actions on merge to main). | ADR-0003; human-confirmed 2026-06-23 |
+| 4 | IaC choice | **Terraform** (GitHub-hosted runners using AWS OIDC federation; plan on PR, apply on main). | ADR-0003; human-confirmed 2026-06-23 |
 | 5 | AWS region | **`us-east-2`** (Ohio). | ADR-0003; human-confirmed 2026-06-23 |
 | 6 | Secrets store | **AWS Parameter Store** (per requirements doc §10). | Tasks 2.3, 2.10 |
 | 7 | Docs dir naming (`docs/` vs `doc/`) | **Open — to be settled in Phase 1.** AGENTS.md and this plan reference `doc/`; repo currently uses `docs/`. | Low risk; resolves with Phase 1 artifacts |
@@ -108,7 +108,7 @@ engine, email notifications, load testing, and production hardening (Phases 3–
 - AWS Lambda (ARM64, 256 MB, 5–10s timeout), DynamoDB (tables per data model — see ADR-0001)
 - `uv` (package manager), `ruff` (lint+format), `mypy --strict` (types), `pytest` (tests)
 - Google OIDC (identity) + app-issued **JWT** session (resolved 2026-06-23)
-- IaC: **Terraform** (provisioned via GitHub Actions) — region **`us-east-2`**
+- IaC: **Terraform** (GitHub-hosted runners using AWS OIDC federation) — region **`us-east-2`**
 
 **Frontend**
 - Node.js LTS, Next.js (App Router), TypeScript, Tailwind CSS
@@ -1035,7 +1035,8 @@ session summary before registration."
 
 **Description:** Set up GitHub Actions workflows for backend (lint, type-check, test, Lambda
 package + deploy, Terraform plan/apply) and frontend (build, type-check, deploy to Cloudflare
-Pages with preview per branch). Also resolves advisory A9.
+Pages with preview per branch) using GitHub-hosted runners and AWS OIDC federation for AWS auth.
+Also resolves advisory A9.
 
 **Acceptance criteria:**
 - [ ] `.github/workflows/backend-ci.yml`:
@@ -1044,12 +1045,13 @@ Pages with preview per branch). Also resolves advisory A9.
   - Uses `uv` for Python dependency management (cache `~/.cache/uv`)
 - [ ] `.github/workflows/terraform.yml`:
   - **Triggers:** `pull_request` to `main` (plan only), `push` to `main` (plan + apply)
+  - PR jobs use plan/read-only trust; apply trust is restricted to main-branch workflows
   - Uses `hashicorp/setup-terraform@v3`; configures AWS credentials via `aws-actions/configure-aws-credentials`
   - Terraform backend: S3 bucket + DynamoDB lock table (create via one-time `terraform init` bootstrap)
 - [ ] `.github/workflows/frontend-ci.yml`:
   - **Triggers:** `push` to any branch, `pull_request` to `main`
   - **Jobs:** `lint` (npm run lint), `typecheck` (npx tsc --noEmit), `build` (npm run build), `deploy-preview` (on push to non-main branches — `npx wrangler pages deploy`), `deploy-production` (on push to `main` — `npx wrangler pages deploy --branch main`)
-- [ ] GitHub Actions secrets configured: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `GOOGLE_CLIENT_ID`
+- [ ] GitHub Actions config uses AWS OIDC role ARN (repo/environment config), plus `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `GOOGLE_CLIENT_ID`
 - [ ] JWT signing secret (`JWT_SECRET`) provisioned into AWS Parameter Store by Terraform (`infra/lambda.tf`), NOT stored as a GitHub Actions secret — the Lambda reads it at cold-start (per ADR-0002). GitHub Actions OIDC role grants Lambda the `ssm:GetParameter` permission.
 - [ ] `README.md` updated with CI status badges for all 3 workflows
 - [ ] **A9 resolved:** `docs/requirements_baseline.md` §5.3 NFR-SCALE-2 wording changed to "≤ $1/month idle"

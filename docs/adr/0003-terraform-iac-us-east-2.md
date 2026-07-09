@@ -63,6 +63,9 @@ The Terraform workspace lives in `infra/` at the repo root. It provisions:
 - **Action required:** Task 2.10 sets up the Terraform S3 backend, the GitHub Actions workflow
   (`terraform init && terraform plan` on PR; `terraform apply` on main), and the initial Lambda +
   DDB + S3 resources.
+- **Trust note:** GitHub Actions runs on GitHub-hosted runners and federates to AWS via OIDC. PR
+  workflows may only assume the plan/read role; main-branch workflows assume the apply role. The
+  role ARN is supplied from repo/environment config, not long-lived AWS access keys.
 - **Region locked to `us-east-2`** — affects latency to users and OSRM extract geography in Phase 4.
 
 ## Links
