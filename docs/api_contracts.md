@@ -37,7 +37,7 @@ The JWT model, claims, and storage are defined in **ADR-0002 (`docs/adr/0002-app
 - `sub` — Google subject identifier (canonical user key).
 - `email` — Google account email.
 - `name` — display name.
-- `global_role` — one of `superuser` | `manager` | `none`.
+- `global_roles` — one of `superuser` | `manager` | `[]` (empty list = none). For MVP, a user holds at most one global role; the JWT encodes it as a single-valued list for forward compatibility with multi-role users.
 - `iat`, `exp` — issued-at and expiry (1-hour TTL).
 
 Endpoints that operate on a specific carpool session also include the session code in the path (`{code}`). Session-scoped role resolution (Session Admin, Driver, Passenger) is **not** encoded in the JWT — it is looked up per request against the DynamoDB `app_data` table (see RBAC matrix §2.3, §2.4).
@@ -92,6 +92,12 @@ When either limit is exceeded the API returns `429 RATE_LIMITED` (see §3). Rate
 `next_cursor` is `null` when there are no further pages. Clients must treat the cursor as opaque — encoding/decoding is server-internal.
 
 ### 1.6 Idempotency
+
+> **Phase 4 scope.** The `idempotency` DynamoDB table is **not provisioned in Phase 2**.
+> It will be added to `docs/data_model_erd.md` §1 and the Terraform in Phase 4 when
+> `POST /sessions/{code}/match/run` is implemented. See
+> `docs/data_model_erd.md` §8 (Open Questions) and AC-OQ-4 below for the
+> resolved deferral.
 
 `POST /sessions/{code}/match/run` accepts an optional `Idempotency-Key` header:
 
@@ -268,7 +274,22 @@ Exchange a Google ID token for an app session JWT.
 | **Success response** | `200 OK` — `{ "access_token": string, "token_type": "Bearer", "expires_in": int (seconds, default 3600), "user": { "sub": string, "email": string, "name": string, "global_role": "superuser"\|"manager"\|"none" } }` |
 | **Status codes** | `200` success; `400` malformed body; `401 UNAUTHORIZED` (invalid Google token); `422 VALIDATION_ERROR` (missing `id_token`); `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE` (JWKS / Google unreachable). |
 
-### 3.2 `POST /sessions`
+### 3.2 `GET /health`
+
+Operational health check. Returns service status. No authentication required.
+
+| Aspect | Value |
+| --- | --- |
+| **Description** | Lightweight health probe for load balancers, CloudWatch alarms, and deployment verification. Returns `200 OK` when the service is reachable and the runtime is healthy. No dependencies are checked (DynamoDB, Google, etc.) — this is a runtime-alive signal only. |
+| **Auth** | **Unauthenticated.** Rate-limit + audit apply; no RBAC check. |
+| **Required role** | None. |
+| **Request headers** | None required. |
+| **Path / Query params** | None. |
+| **Request body** | None. |
+| **Success response** | `200 OK` — `{ "status": "ok" }`. |
+| **Status codes** | `200`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
+
+### 3.3 `POST /sessions`
 
 Create a new carpool session.
 
@@ -279,11 +300,26 @@ Create a new carpool session.
 | **Required role** | **Superuser or Manager** (RBAC P-01). |
 | **Request headers** | `Content-Type: application/json` |
 | **Path / Query params** | None. |
-| **Request body** | `SessionCreate` (see §5). Fields: `title` (string, 1–120 chars, required), `description` (string, 0–2000 chars, optional), `trip_mode` (`"to_destination"` \| `"from_origin"`, required), `anchor_postal_code` (string, required — geocoded server-side per FR-5), `earliest_pickup` (ISO-8601 datetime, required), `latest_arrival` (ISO-8601 datetime, required, must be ≥ `earliest_pickup`), `registration_deadline` (ISO-8601 datetime, required, must be ≤ `earliest_pickup`). Optional: `capacity_hint` (integer, ≥1, optional — suggested default seat count; no upper cap per OQ-11). |
+| **Request body** | `SessionCreate` (see §5). Fields: `title` (string, 1–120 chars, required), `description` (string, 0–2000 chars, optional), `trip_mode` (`"to_destination"` \| `"from_origin"`, required), `anchor_postal_code` (string, required — geocoded server-side per FR-5), `earliest_pickup` (ISO-8601 datetime, required), `latest_arrival` (ISO-8601 datetime, required, must be ≥ `earliest_pickup`), `registration_deadline` (ISO-8601 datetime, required, must be ≤ `earliest_pickup`). Optional: `capacity_hint` (integer, ≥1, optional — suggested default seat count; no upper cap per OQ-11; see FR-2 attributes table). |
 | **Success response** | `201 Created` — `SessionResponse` (see §5). `Location` header contains the canonical session URL. |
 | **Status codes** | `201` created; `400` malformed body; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `409 SESSION_ALREADY_EXISTS` (server-generated code collision — extraordinarily rare); `422 VALIDATION_ERROR`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE` (geocoding dependency). |
 
-### 3.3 `GET /sessions/{code}`
+### 3.4 `GET /sessions`
+
+List sessions visible to the authenticated caller. The response is scope-filtered by the caller's effective role per RBAC P-03.
+
+| Aspect | Value |
+| --- | --- |
+| **Description** | Returns a paginated list of sessions the caller can see. **Superusers** see all sessions. **Managers** see all sessions. **Session Admins** see sessions they administer (via `gsi_admins_by_user` GSI). **Drivers and Passengers** see only sessions where they are registered (via `gsi_sessions_by_user` GSI). Each `SessionResponse` in the list is scope-filtered per FR-9 — admin-only fields (e.g., `match_score`) are stripped for non-admin callers. |
+| **Auth** | Required. |
+| **Required role** | Any authenticated user; response is scope-filtered (RBAC E-03). |
+| **Request headers** | None required. |
+| **Path / Query params** | `cursor` (string, optional — pagination cursor from a previous response `next_cursor` field); `limit` (int, optional, default 20, max 100). |
+| **Request body** | None. |
+| **Success response** | `200 OK` — `PaginatedResponse[SessionResponse]` (see §4). |
+| **Status codes** | `200`; `401 UNAUTHORIZED`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
+
+### 3.5 `GET /sessions/{code}`
 
 Retrieve session details. Visibility is filtered by the caller's effective role (RBAC P-02).
 
@@ -298,7 +334,7 @@ Retrieve session details. Visibility is filtered by the caller's effective role 
 | **Success response** | `200 OK` — `SessionResponse` (see §5). |
 | **Status codes** | `200`; `401 UNAUTHORIZED`; `403 FORBIDDEN` (caller authenticated but has no role in this session); `404 SESSION_CODE_NOT_FOUND`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
 
-### 3.4 `PATCH /sessions/{code}`
+### 3.6 `PATCH /sessions/{code}`
 
 Update session configuration.
 
@@ -313,7 +349,7 @@ Update session configuration.
 | **Success response** | `200 OK` — updated `SessionResponse`. |
 | **Status codes** | `200`; `400` malformed body; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `409 SESSION_NOT_OPEN` (illegal status transition); `422 VALIDATION_ERROR`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE`. |
 
-### 3.5 `DELETE /sessions/{code}`
+### 3.7 `DELETE /sessions/{code}`
 
 Delete a session and all of its dependent records (registrations, matches, admin assignments).
 
@@ -328,7 +364,7 @@ Delete a session and all of its dependent records (registrations, matches, admin
 | **Success response** | `204 No Content`. |
 | **Status codes** | `204`; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
 
-### 3.6 `POST /sessions/{code}/register`
+### 3.8 `POST /sessions/{code}/register`
 
 Register as a driver or passenger for the session.
 
@@ -343,7 +379,7 @@ Register as a driver or passenger for the session.
 | **Success response** | `201 Created` — `RegistrationResponse`. |
 | **Status codes** | `201`; `400` malformed body; `401 UNAUTHORIZED`; `409 ALREADY_REGISTERED`; `409 REGISTRATION_CLOSED`; `422 VALIDATION_ERROR` (incl. geocoding failure per §3.5 of requirements baseline); `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE`. |
 
-### 3.7 `GET /sessions/{code}/me`
+### 3.9 `GET /sessions/{code}/me`
 
 Retrieve the caller's own registration in the session.
 
@@ -358,7 +394,7 @@ Retrieve the caller's own registration in the session.
 | **Success response** | `200 OK` — `RegistrationResponse`. |
 | **Status codes** | `200`; `401 UNAUTHORIZED`; `404 NOT_FOUND` (caller not registered in `{code}`); `404 SESSION_CODE_NOT_FOUND`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
 
-### 3.8 `PATCH /sessions/{code}/me`
+### 3.10 `PATCH /sessions/{code}/me`
 
 Update the caller's own registration.
 
@@ -375,7 +411,7 @@ Update the caller's own registration.
 
 > **Companion endpoint:** `DELETE /sessions/{code}/me` (RBAC P-11) withdraws the registration. Not explicitly listed in §9 of the master spec; included for completeness. Same RBAC as PATCH. Returns `204`.
 
-### 3.9 `POST /sessions/{code}/match/run`
+### 3.11 `POST /sessions/{code}/match/run`
 
 Run the matching engine and produce a new proposed match version.
 
@@ -384,13 +420,13 @@ Run the matching engine and produce a new proposed match version.
 | **Description** | Triggers a new CVRPTW solve (FR-6). Each call writes `MATCH#V{n+1}` to DynamoDB. For sessions < 300 users, runs synchronously in the API Lambda; for ≥ 300 users the call returns `202 Accepted` with a job reference and the solve runs async (Phase 4 detail). |
 | **Auth** | Required. |
 | **Required role** | **Superuser, Manager, or Session Admin of `{code}`** (RBAC P-14 / P-19). |
-| **Request headers** | `Content-Type: application/json` (optional); `Idempotency-Key` (optional, see §1.6). |
+| **Request headers** | `Content-Type: application/json` (optional); `Idempotency-Key` (optional, see §1.6). **Note:** the underlying `idempotency` DynamoDB table is deferred to Phase 4 (see §1.6 banner). |
 | **Path / Query params** | `{code}` — session code (required). |
 | **Request body** | None (or empty `{}`). |
 | **Success response** | `200 OK` (sync, < 300 users) — `MatchRunResponse` (see §5) summarizing the proposed version (`version`, `objective_score`, `assigned_count`, `unassigned_count`, `compute_time_ms`, `created_at`). `202 Accepted` (async, ≥ 300 users) — `{ "job_id": string, "status": "queued", "estimated_seconds": int }`. |
 | **Status codes** | `200` / `202`; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `409 SESSION_NOT_OPEN`; `422 VALIDATION_ERROR` (no registrations); `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE`. |
 
-### 3.10 `GET /sessions/{code}/match`
+### 3.12 `GET /sessions/{code}/match`
 
 Retrieve the latest match for the session. Visibility is role-filtered.
 
@@ -405,7 +441,7 @@ Retrieve the latest match for the session. Visibility is role-filtered.
 | **Success response** | `200 OK` — `MatchResult` (see §5). The response is filtered: admins see all `MatchAssignment`s; drivers see only their own; passengers see only their own `driver_sub` and pickup order. |
 | **Status codes** | `200`; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `404 NOT_FOUND` (no proposed/approved match exists yet); `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
 
-### 3.11 `POST /sessions/{code}/match/approve`
+### 3.13 `POST /sessions/{code}/match/approve`
 
 Approve a specific match version.
 
@@ -420,7 +456,7 @@ Approve a specific match version.
 | **Success response** | `200 OK` — approved `MatchResult`. `details.publish: bool` and `details.notifications_queued: int` (count of `notification_pending` items written for deferred delivery per ADR-0008 / OQ-6). The API never blocks on email delivery. |
 | **Status codes** | `200`; `400` malformed body; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `409 MATCH_VERSION_LOCKED` (already approved, superseded, or invalid `version`); `422 VALIDATION_ERROR`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE`. |
 
-### 3.12 `PATCH /sessions/{code}/match/manual`
+### 3.14 `PATCH /sessions/{code}/match/manual`
 
 Manual override of the approved or proposed match (FR-8). Discriminated union on `operation`.
 
@@ -435,7 +471,7 @@ Manual override of the approved or proposed match (FR-8). Discriminated union on
 | **Success response** | `200 OK` — updated `MatchResult`. |
 | **Status codes** | `200`; `400` malformed body; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `409 MATCH_VERSION_LOCKED` (the target assignment is locked by an earlier override); `422 VALIDATION_ERROR` (hard-constraint violation, e.g., target driver's seat capacity exceeded); `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE`. |
 
-### 3.13 `POST /sessions/{code}/admin/notify`
+### 3.15 `POST /sessions/{code}/admin/notify`
 
 Send an ad-hoc notification to participants.
 
@@ -450,7 +486,7 @@ Send an ad-hoc notification to participants.
 | **Success response** | `200 OK` — `{ "notification_id": string, "event": string, "recipient_count": int, "queued_count": int, "failed_count": int, "notifications_pending": bool }`. `queued_count` reflects the number of `notification_pending` items written to DynamoDB; `failed_count` reflects items that could not be queued (rare; SQS / DynamoDB write failure). |
 | **Status codes** | `200`; `400` malformed body; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `404 SESSION_CODE_NOT_FOUND`; `422 VALIDATION_ERROR`; `429 RATE_LIMITED`; `500 INTERNAL_ERROR`; `503 SERVICE_UNAVAILABLE` (Microsoft Graph unreachable). |
 
-### 3.14 `GET /audit`
+### 3.16 `GET /audit`
 
 Query audit logs (FR-11).
 
@@ -465,7 +501,7 @@ Query audit logs (FR-11).
 | **Success response** | `200 OK` — `PaginatedResponse[AuditEvent]`. `AuditEvent` shape: `{ "event_id": string, "timestamp": ISO-8601, "actor_sub": string | null, "actor_role": string | null, "session_code": string | null, "event": string, "payload_summary": object (no PII), "request_id": string, "source_ip": string }`. |
 | **Status codes** | `200`; `400` malformed query; `401 UNAUTHORIZED`; `403 FORBIDDEN`; `422 VALIDATION_ERROR` (invalid filter); `429 RATE_LIMITED`; `500 INTERNAL_ERROR`. |
 
-### 3.15 `POST /sessions/{code}/admin` **(new endpoint)**
+### 3.17 `POST /sessions/{code}/admin` **(new endpoint)**
 
 Assign a user as Session Admin for the session. Defined in `docs/rbac_matrix.md` §4 and `plans/phase-1-discovery.md` Task 2.
 
@@ -530,9 +566,9 @@ class RegistrationStatus(str, Enum):
 
 class OverrideOperation(str, Enum):
     MOVE_PASSENGER = "move_passenger"
-    UNASSIGN_PASSENGER = "unassign_passenger"
-    MARK_UNMATCHED = "mark_unmatched"
-    LOCK_ASSIGNMENT = "lock_assignment"
+    UNASSIGN = "unassign"
+    UNMATCH = "unmatch"
+    LOCK = "lock"
 
 
 class NotificationEvent(str, Enum):
@@ -571,7 +607,7 @@ class UserInfo(BaseModel):
     sub: str
     email: EmailStr
     name: str
-    global_role: GlobalRole
+    global_roles: list[str] = Field(default_factory=list)
 
 
 class GoogleAuthResponse(BaseModel):
@@ -861,54 +897,59 @@ Endpoint-to-role mapping, derived from `docs/rbac_matrix.md` §5 and the endpoin
 | # | Method | Endpoint | Required Role | RBAC Ref | Visibility Scope |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `POST` | `/auth/google` | **Unauthenticated** (issues JWT) | E-01 | n/a |
-| 2 | `POST` | `/sessions` | Superuser or Manager | P-01 | n/a |
-| 3 | `GET` | `/sessions/{code}` | Any authenticated user (scope-filtered) | P-02 | Scope-filtered |
-| 4 | `PATCH` | `/sessions/{code}` | Superuser, Manager, or Session Admin of `{code}` | P-04 | n/a |
-| 5 | `DELETE` | `/sessions/{code}` | **Superuser** | P-05 | n/a |
-| 6 | `POST` | `/sessions/{code}/register` | Any authenticated user (registration must be open) | P-07 / P-08 | Self only |
-| 7 | `GET` | `/sessions/{code}/me` | Any authenticated user | P-09 | Self only |
-| 8 | `PATCH` | `/sessions/{code}/me` | Any authenticated user | P-10 | Self only |
-| 9 | `DELETE` | `/sessions/{code}/me` | Any authenticated user | P-11 | Self only |
-| 10 | `POST` | `/sessions/{code}/match/run` | Superuser, Manager, or Session Admin of `{code}` | P-14 / P-19 | n/a |
-| 11 | `GET` | `/sessions/{code}/match` | Superuser, Manager, Session Admin of `{code}` (proposed) / Any authenticated registrant (approved) | P-15 + FR-9 | Role-filtered |
-| 12 | `POST` | `/sessions/{code}/match/approve` | Superuser, Manager, or Session Admin of `{code}` | P-17 | n/a |
-| 13 | `PATCH` | `/sessions/{code}/match/manual` | Superuser, Manager, or Session Admin of `{code}` | P-20..P-23 | n/a |
-| 14 | `POST` | `/sessions/{code}/admin/notify` | Superuser, Manager, or Session Admin of `{code}` | A-01 | n/a |
-| 15 | `POST` | `/sessions/{code}/admin` | **Superuser or Manager** | P-06 | n/a |
-| 16 | `GET` | `/audit` | Superuser or Manager | A-02 | Global |
+| 2 | `GET` | `/health` | **Unauthenticated** | E-22 | n/a |
+| 3 | `POST` | `/sessions` | Superuser or Manager | P-01 | n/a |
+| 4 | `GET` | `/sessions` | Any authenticated user (scope-filtered) | P-03 | Scope-filtered |
+| 5 | `GET` | `/sessions/{code}` | Any authenticated user (scope-filtered) | P-02 | Scope-filtered |
+| 6 | `PATCH` | `/sessions/{code}` | Superuser, Manager, or Session Admin of `{code}` | P-04 | n/a |
+| 7 | `DELETE` | `/sessions/{code}` | **Superuser** | P-05 | n/a |
+| 8 | `POST` | `/sessions/{code}/register` | Any authenticated user (registration must be open) | P-07 / P-08 | Self only |
+| 9 | `GET` | `/sessions/{code}/me` | Any authenticated user | P-09 | Self only |
+| 10 | `PATCH` | `/sessions/{code}/me` | Any authenticated user | P-10 | Self only |
+| 11 | `DELETE` | `/sessions/{code}/me` | Any authenticated user | P-11 | Self only |
+| 12 | `POST` | `/sessions/{code}/match/run` | Superuser, Manager, or Session Admin of `{code}` | P-14 / P-19 | n/a |
+| 13 | `GET` | `/sessions/{code}/match` | Superuser, Manager, Session Admin of `{code}` (proposed) / Any authenticated registrant (approved) | P-15 + FR-9 | Role-filtered |
+| 14 | `POST` | `/sessions/{code}/match/approve` | Superuser, Manager, or Session Admin of `{code}` | P-17 | n/a |
+| 15 | `PATCH` | `/sessions/{code}/match/manual` | Superuser, Manager, or Session Admin of `{code}` | P-20..P-23 | n/a |
+| 16 | `POST` | `/sessions/{code}/admin/notify` | Superuser, Manager, or Session Admin of `{code}` | A-01 | n/a |
+| 17 | `POST` | `/sessions/{code}/admin` | **Superuser or Manager** | P-06 | n/a |
+| 18 | `GET` | `/audit` | Superuser or Manager | A-02 | Global |
 
-### 5.1 Companion Endpoints Documented But Not in §9
+### 5.1 Companion Endpoints by Phase
 
-The following endpoints are **required by the RBAC matrix** but are not explicitly listed in §9 of the master spec. They are documented here for completeness and must be ratified by an ADR before Phase 2 implementation:
+The following endpoints are **required by the RBAC matrix** and are documented here for completeness.
+
+**Phase 2 — documented but deferred:**
 
 | Method | Endpoint | Required Role | RBAC Ref | Notes |
 | --- | --- | --- | --- | --- |
-| `GET` | `/sessions` | Any authenticated user (scope-filtered) | P-03 | List view; scope-filtered. |
-| `DELETE` | `/sessions/{code}/me` | Any authenticated user | P-11 | Withdraw own registration. |
-| `POST` | `/sessions/{code}/registration/open` | Superuser, Manager, or Session Admin of `{code}` | P-12 | Status transition `Draft` → `Registration Open`. |
-| `POST` | `/sessions/{code}/registration/close` | Superuser, Manager, or Session Admin of `{code}` | P-13 | Status transition `Registration Open` → `Matching Pending`. |
-| `GET` | `/sessions/{code}/assignment` | Any authenticated user (scope-filtered) | V-06 / V-07 / V-08 | "My assignment" view (driver sees roster, passenger sees driver). |
-| `GET` | `/sessions/{code}/registrations` | Superuser, Manager, or Session Admin of `{code}` | V-02 / V-03 / V-05 | Admin roster view. |
-| `GET` | `/health` | Unauthenticated | n/a | Operational probe. Rate-limit + audit apply. |
+| `DELETE` | `/sessions/{code}/me` | Any authenticated user | P-11 | Withdraw own registration. Phase 3. Documented inline in §3.10. |
 
-> **Action item:** raise an ADR proposing the addition of the endpoints above to §9 of the master spec, or document the rationale for folding them into `PATCH /sessions/{code}` (status field).
+**Phase 3–5 — deferred:**
+
+| Method | Endpoint | Required Role | RBAC Ref | Phase | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `POST` | `/sessions/{code}/registration/open` | SU/Manager/Session Admin | P-12 | Phase 3 | **Folded into `PATCH /sessions/{code}` status field per D6.** |
+| `POST` | `/sessions/{code}/registration/close` | SU/Manager/Session Admin | P-13 | Phase 3 | **Folded into `PATCH /sessions/{code}` status field per D6.** |
+| `GET` | `/sessions/{code}/registrations` | SU/Manager/Session Admin | V-02/V-03/V-05 | Phase 3 | Admin roster view. |
+| `GET` | `/sessions/{code}/assignment` | Any authenticated (scope-filtered) | V-06/V-07/V-08 | Phase 5 | "My assignment" view — post-approval visibility. |
 
 ---
 
-## 6. Open Questions
+## 6. Open Questions (Resolved 2026-06-24)
 
-These open questions affect this contract and must be resolved before Phase 2 (Foundation) completes:
+All Phase 2-blocking open questions have been resolved by human decision during the Phase 1 sign-off review.
 
-| ID | Question | Affects |
-| --- | --- | --- |
-| AC-OQ-1 | Confirm the list of error codes — is `TARGET_USER_UNKNOWN` (404) a desired distinct code, or fold into `NOT_FOUND`? | §2.1, §3.15 |
-| AC-OQ-2 | Confirm cursor-pagination envelope field names (`items`, `next_cursor`, `limit`) and that no client-side `total`/`has_more` will be exposed. | §1.5, §4 |
-| AC-OQ-3 | Confirm the async boundary for `POST /sessions/{code}/match/run` at ≥ 300 users (`202 Accepted` + job reference). | §3.9 |
-| AC-OQ-4 | Confirm idempotency scope is `(sub, {code})` and TTL is 24h. | §1.6 |
-| AC-OQ-5 | Confirm rate-limit headers are mandatory on **every** response (including 4xx / 5xx). | §1.4 |
-| AC-OQ-6 | Confirm the canonical companion endpoints in §5.1 (list, registration open/close, my assignment, registrations, health) should be ratified via ADR and added to §9. | §5.1 |
-| AC-OQ-7 | Confirm the `email` field in `RegistrationCreate` must match the authenticated Google email exactly, not merely the domain. | §3.6 |
-| AC-OQ-8 | Confirm `DELETE /sessions/{code}/admin/{sub}` (revocation, RBAC matrix §4.7) is out of scope for v1 of this contract. | §4.7 |
+| ID | Question | Resolution | Resolved |
+| --- | --- | --- | --- |
+| AC-OQ-1 | Confirm the list of error codes — is `TARGET_USER_UNKNOWN` (404) a desired distinct code, or fold into `NOT_FOUND`? | **Keep as distinct 404 code.** Better UX than generic `NOT_FOUND` — admin assignment UX needs specificity. Already modeled in §3.15. | 2026-06-24 |
+| AC-OQ-2 | Confirm cursor-pagination envelope field names (`items`, `next_cursor`, `limit`) and that no client-side `total`/`has_more` will be exposed. | **Confirmed.** `items`, `next_cursor`, `limit` as documented in §1.5 and `PaginatedResponse[T]` (§4). No `total`/`has_more` exposed — consistent with cursor-based pattern. | 2026-06-24 |
+| AC-OQ-5 | Confirm rate-limit headers are mandatory on **every** response (including 4xx / 5xx). | **Confirmed.** Rate-limit is the outermost dependency (ADR-0005); headers must be present on every response including errors. §1.4 already states this. | 2026-06-24 |
+| AC-OQ-6 | Confirm the canonical companion endpoints in §5.1 (list, registration open/close, my assignment, registrations, health) should be ratified via ADR and added to §9. | **Resolved by scope split.** `GET /health`, `POST /sessions/{code}/admin`, `GET /sessions`, and `DELETE /sessions/{code}/me` are ratified for Phase 2. `POST /sessions/{code}/registration/open`, `POST /sessions/{code}/registration/close`, `GET /sessions/{code}/assignment`, and `GET /sessions/{code}/registrations` are deferred to Phase 3. Registration open/close folded into `PATCH /sessions/{code}` status field; separate endpoints not needed. §5.1 updated accordingly. | 2026-06-24 |
+| AC-OQ-3 | Confirm the async boundary for `POST /sessions/{code}/match/run` at ≥ 300 users (`202 Accepted` + job reference). | **Deferred to Phase 4.** Does not block Phase 2. | 2026-06-24 |
+| AC-OQ-4 | Confirm idempotency scope is `(sub, {code})` and TTL is 24h. | **Deferred to Phase 4 with note:** `idempotency` table is not provisioned in Phase 2 (ERD §1 does not include it). Revisit when match/run endpoint is implemented. | 2026-06-24 |
+| AC-OQ-7 | Confirm the `email` field in `RegistrationCreate` must match the authenticated Google email exactly, not merely the domain. | **Deferred to Phase 3** (registration implementation). Current draft defaults to exact match. | 2026-06-24 |
+| AC-OQ-8 | Confirm `DELETE /sessions/{code}/admin/{sub}` (revocation, RBAC matrix §4.7) is out of scope for v1 of this contract. | **Confirmed — out of scope for v1.** Explicitly deferred in RBAC matrix §4.7. | 2026-06-24 |
 
 ---
 

@@ -1,3 +1,8 @@
+> **Amendment pointer (Phase 2 housekeeping):** This spec is v3.0 and already incorporates
+> the resolutions below. This banner is an at-a-glance overlay, not a content fix.
+> Superseding ADRs: ADR-0001 (multi-table DynamoDB, supersedes single-table assumption),
+> ADR-0008 (deferred notification delivery, supersedes synchronous email). See `docs/adr/`.
+
 # Carpool Matching Application — Functional Requirements & Solution Architecture (v3)
 
 ## Version
@@ -20,7 +25,7 @@ v3.0 (Updated with Phase 1 Discovery resolutions)
 - Backend: Python + FastAPI
 - Hosting: AWS Lambda ARM64
 - Authentication: Google OIDC + Session Code
-- Mapping: OpenStreetMap ecosystem (OSRM / Nominatim)
+- Mapping: OpenStreetMap ecosystem (ORS / Nominatim)
 - Database: DynamoDB
 - Logging: CloudWatch → S3 → Athena
 - CDN / Edge Protection: Cloudflare Free
@@ -195,6 +200,8 @@ Session code may be:
 - manually entered
 - prepopulated via URL
 
+**Session code format:** 6-character uppercase alphanumeric (`[A-Z0-9]{6}`), server-generated. Stored uppercased; lookup is case-insensitive. Collision retry up to 3 attempts.
+
 Example:
 `/register?session=ABC123`
 
@@ -236,6 +243,7 @@ Session attributes:
 | earliest_pickup       | datetime     |
 | latest_arrival        | datetime     |
 | registration_deadline | datetime     |
+| capacity_hint         | integer \| null |
 | status                | enum         |
 
 Session status (snake_case enum values):
@@ -332,7 +340,7 @@ Provider:
 * OpenRouteService (ORS) free-tier API (`/v2/directions`, `/v2/matrix`)
 * Free tier: 2000 req/day, 40 req/min, ~50 locations per matrix call
 * Matrix calls must be chunked for sessions with >50 locations
-* OSRM self-hosting is deferred to post-MVP
+* ORS self-hosting is available as an upgrade path post-MVP if free-tier rate limits (2,000 req/day) become a bottleneck. OSRM was considered but requires self-hosting at all times — rejected in favor of ORS hosted free tier.
 
 Required endpoints:
 
@@ -582,7 +590,7 @@ Used for:
 # 8. Data Model
 
 Recommended:
-Multi-table DynamoDB design — tables named per data model (per ADR-0001). The `app_data` table uses the single-table PK/SK-overloading pattern internally for business entities. Cache and counter stores are in separate named tables with TTL. See `docs/data_model_erd.md` for the full ERD.
+Multi-table DynamoDB design — **5 tables named per data model** (ADR-0001), not a single `app_data` table. The `app_data` table uses the single-table PK/SK-overloading pattern internally for business entities (users, sessions, registrations, matches, session admin roles, audit logs). Cache and counter stores are in four separate named tables (`session_cache`, `rate_limit_cache`, `brute_force_counter`, `geocode_cache`) with TTL attributes. See `docs/data_model_erd.md` §1 for the authoritative table enumeration and `docs/adr/0001-table-naming-by-data-model.md` for rationale.
 
 ---
 
@@ -1091,7 +1099,7 @@ Total:
 
 | Risk              | Severity | Mitigation           |
 | ----------------- | -------- | -------------------- |
-| OSM rate limits   | High     | Self-host OSRM       |
+| OSM rate limits   | High     | Use ORS free tier (2000 req/day); cache geocoding results; self-hosting deferred post-MVP       |
 | Matching too slow | High     | Async jobs           |
 | Privacy leakage   | High     | Strict RBAC          |
 | Cost spikes       | Medium   | Reserved concurrency |

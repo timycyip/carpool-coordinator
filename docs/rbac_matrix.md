@@ -259,8 +259,8 @@ Every REST endpoint in `docs/functional_requirements_and_architecture.md` §9 pl
 | E-12 | `/sessions/{code}/match` | GET | **Superuser, Manager, Session Admin of `{code}`** | P-15. Returns `404` until a proposed match exists. Drivers and passengers receive `403`. |
 | E-13 | `/sessions/{code}/match/approve` | POST | **Superuser, Manager, or Session Admin of `{code}`** | P-17. Triggers P-18 (publish). |
 | E-14 | `/sessions/{code}/match/manual` | PATCH | **Superuser, Manager, or Session Admin of `{code}`** | P-20, P-21, P-22, P-23 — discriminated union in the request body selects the operation. |
-| E-15 | `/sessions/{code}/registration/open` | POST | **Superuser, Manager, or Session Admin of `{code}`** | P-12. (Implicit — Section 9 of the master spec does not list this endpoint explicitly; it is required by §4.2.1. Documented here; raise as a follow-up ADR if the API contract team disagrees.) |
-| E-16 | `/sessions/{code}/registration/close` | POST | **Superuser, Manager, or Session Admin of `{code}`** | P-13. (Same note as E-15.) |
+| E-15 | `/sessions/{code}/registration/open` | POST | **Superuser, Manager, or Session Admin of `{code}`** | P-12. (Implicit — Section 9 of the master spec does not list this endpoint explicitly; **D6 decision 2026-06-24: folded into `PATCH /sessions/{code}` with `{"status": "registration_open"}`** — separate endpoint not needed.) |
+| E-16 | `/sessions/{code}/registration/close` | POST | **Superuser, Manager, or Session Admin of `{code}`** | P-13. (Same note as E-15 — **D6 decision: folded into `PATCH /sessions/{code}`**.) |
 | E-17 | `/sessions/{code}/admin` | POST | **Superuser or Manager** | **NEW endpoint** defined in §4. P-06. |
 | E-18 | `/sessions/{code}/admin/notify` | POST | **Superuser, Manager, or Session Admin of `{code}`** | A-01. |
 | E-19 | `/audit` | GET | **Superuser or Manager** | A-02. |

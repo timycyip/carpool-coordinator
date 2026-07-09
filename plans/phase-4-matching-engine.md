@@ -13,6 +13,14 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 | **Phase 4** | A8 | NFR-PERF-2 targets "Matching < 30s for 500 users" but the MVP greedy solver caps at <300 users per the spec. The 500-user NFR is untestable on the MVP solver. Resolution: lower the NFR to 300 users for MVP and add a post-MVP NFR for 500 users in Phase 6. Update `docs/requirements_baseline.md` NFR-PERF-2. | Planning |
 | **Anytime** | A6 | Broken link in `docs/requirements_baseline.md` Appendix A: `plans/phase-4-matching.md` should be `plans/phase-4-matching-engine.md`. Fix the link. | Planning |
 
+### Cross-phase blockers from Phase 2 review (2026-06-24)
+
+| Priority | ID | Item | Owner |
+|----------|----|------|-------|
+| **Phase 4** | B4-P2 | Override operation literal mismatch — API contract `OverrideOperation` enum uses `unassign_passenger`, `lock_assignment` but request bodies use `unassign`, `lock`. Reconcile before implementation. Choose one convention and align. | Backend |
+| **Phase 4** | B5-P2 | Match entity shape mismatch — ERD uses `assignments: map {driver → [passengers]}` with `__unmatched__` sentinel; API Contract uses `assignments: list[{driver_sub, passenger_subs, pickup_order, locked}]` with separate `unassigned: list[str]`. `pickup_order`, `locked`, `match_score` (ERD) vs `objective_score` (API) also diverge. Reconcile before implementation. | Backend + Planning |
+| **Phase 4** | H1-P2 | Match versioning ERD §4.2 "exactly one approved per session" contradicts §4.5 scenario producing two approved versions. Clarify: "currently approved = highest-version-number `MATCH#V<n>` with `status=approved`; historical approved versions retained." | Backend |
+
 ---
 
 ## Open Questions (to refine)
@@ -44,10 +52,11 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 4. **Stage 3 — Cost matrix**: build driver× passenger cost matrix using ORS `/v2/matrix` for actual road distances/durations. Compute per-pair score via the cost function (detour, lateness, imbalance). Batched for sessions >50 participants.
 5. **Stage 4 — Greedy optimization**: assign passengers greedily by ascending score subject to seat capacity + time-window feasibility. Track unmatched passengers and over-capacity/under-capacity drivers.
 6. **Matching APIs**: `POST /sessions/{code}/match/run` (Session Admin) — runs engine, writes `MATCH#V{n+1}` as `Matching Pending → Matching Proposed`. `GET /sessions/{code}/match` — latest proposed match (admin only). `PATCH /sessions/{code}/match/manual` — admin override (move/unassign/lock).
-7. **Manual override service**: `app/services/override.py` — implement FR-8 (move passenger, unassign, mark unmatched, lock assignment). Validate overrides keep hard constraints satisfied; warn (don't block) on soft-constraint regressions.
-8. **Session status transitions**: enforce `Registration Open → (close) → Matching Pending → Matching Proposed` and block registration changes once matching has run.
-9. **Per-passenger matching score**: store per-pair score for admin transparency (FR-9: admin/manager/superuser only).
-10. **Performance guardrail**: for sessions >300 users, refuse synchronous run with a clear message directing to the (future) async path; document the limit.
+7. **Idempotency table + `match/run` idempotency** (deferred from Phase 2): add `idempotency` table to `docs/data_model_erd.md` §1 with PK=`IDEMPOTENCY#<sub>#<session>#<key>`, SK=`METADATA`, TTL=24h. Provision the table in Terraform (`infra/idempotency.tf`). Implement idempotency-key logic in `POST /sessions/{code}/match/run` per `docs/api_contracts.md` §1.6: on repeat key within 24h, return original response without re-running the engine. Scope: `(sub, {code})`.
+8. **Manual override service**: `app/services/override.py` — implement FR-8 (move passenger, unassign, mark unmatched, lock assignment). Validate overrides keep hard constraints satisfied; warn (don't block) on soft-constraint regressions.
+9. **Session status transitions**: enforce `Registration Open → (close) → Matching Pending → Matching Proposed` and block registration changes once matching has run.
+10. **Per-passenger matching score**: store per-pair score for admin transparency (FR-9: admin/manager/superuser only).
+11. **Performance guardrail**: for sessions >300 users, refuse synchronous run with a clear message directing to the (future) async path; document the limit.
 
 ### Frontend (Next.js)
 1. **Admin matching dashboard**: "Run matching" action, status indicator, run history (versions).
@@ -59,6 +68,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 ## Deliverables
 - `app/services/matching.py` with the 4-stage pipeline, adapted from existing logic.
 - Matching APIs (`run`, `get`, `manual`) with versioning.
+- **`infra/idempotency.tf`** — `idempotency` DynamoDB table (deferred from Phase 2) for `POST /match/run` idempotency-key support per §1.6.
 - Admin matching review/edit UI with route maps and scores.
 - Performance: <30s for 500 users (NFR), synchronous in Lambda.
 
