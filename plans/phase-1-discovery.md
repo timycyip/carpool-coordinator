@@ -12,6 +12,17 @@ Plan series derived from `docs/functional_requirements_and_architecture.md`. Thi
 Convert the v2 requirements doc into implementation-ready artifacts: signed-off requirements baseline, role matrix, workflow diagrams, data model ERD, API contracts, and low-fi wireframes. Full-stack scope (Next.js frontend + FastAPI backend).
 
 ## Decisions (locked)
+
+> **Supersession notices (Phase 2 housekeeping):**
+> - **ADR-0001** supersedes the earlier single-table `app_data` consolidation assumption
+>   in the Phase 2 plan draft. DynamoDB tables are named per data model (multi-table).
+>   See `docs/adr/0001-table-naming-by-data-model.md`.
+> - **ADR-0008** supersedes the synchronous-email assumption for the API Lambda. Email
+>   delivery is now deferred via `notification_pending` + SQS → Lambda consumer.
+>   See `docs/adr/0008-deferred-notification-delivery.md`.
+>
+> The lines below already cite these ADRs; this banner is an at-a-glance pointer overlay.
+
 - Full-stack plans: Next.js (App Router) on Cloudflare Pages + FastAPI on Lambda ARM64.
 - Multi-table DynamoDB per data model: `app_data` (single-table PK/SK pattern internally for business entities) + separate `session_cache`, `rate_limit_cache`, `brute_force_counter`, `geocode_cache` tables (see [ADR-0001](docs/adr/0001-table-naming-by-data-model.md)). Rate-limit + cache items use TTL.
 - Google OIDC global identity; session code = registration invite; multi-session per user.
