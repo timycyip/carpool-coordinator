@@ -7,13 +7,13 @@
 | **Date** | 2026-06-23 |
 | **Author Role** | Business Analyst |
 | **Status** | **Draft — pending stakeholder sign-off** |
-| **Source Spec** | `docs/functional_requirements_and_architecture.md` v3.0 |
+| **Source Spec** | `docs/functional_requirements_and_architecture.md` v3.1 |
 
 This baseline is a **thin delta document** that records the Phase 1 review status of each
 functional requirement, the open questions resolved during discovery, and the sign-off
 process. All requirement content (canonical registration schema, NFRs with testable
 acceptance criteria, FR details) lives in the **master spec**
-(`docs/functional_requirements_and_architecture.md` v3.0), which has been updated to
+(`docs/functional_requirements_and_architecture.md` v3.1), which has been updated to
 incorporate all Phase 1 resolutions. This document does not duplicate that content — it
 references it.
 
@@ -29,7 +29,7 @@ references it.
 
 > Note: FR-3 and FR-4 are listed separately for traceability to the v2 spec, but their
 > field definitions have been **replaced by the canonical registration schema** in the
-> master spec v3.0 §5 (FR-3/FR-4).
+> master spec v3.1 §5 (FR-3/FR-4).
 
 ---
 
@@ -39,9 +39,9 @@ references it.
 | --- | --- | --- | --- | --- |
 | **FR-1** | Authentication & Session Registration | Accepted | 2 | App session = short-lived JWT (1h TTL) stored in SPA memory (ADR-0002). Session code is the only registration gate; no embedded identity in invite links. |
 | **FR-2** | Session Management | Clarified | 2 | Status enum fixed at 6 values in snake_case (`draft`, `registration_open`, etc.). `anchor_location` geocoded server-side from postal code. Session code case-insensitive unique. |
-| **FR-3** | Registration (canonical schema) | Clarified | 3 | v2 field lists superseded. See master spec v3.0 §5 FR-3/FR-4 for the canonical registration schema (common, driver-specific, passenger-specific, server-derived, validation rules). |
+| **FR-3** | Registration (canonical schema) | Clarified | 3 | v2 field lists superseded. See master spec v3.1 §5 FR-3/FR-4 for the canonical registration schema (common, driver-specific, passenger-specific, server-derived, validation rules). |
 | **FR-4** | User Registration (canonical schema) | Clarified | 3 | Merged into FR-3 canonical schema in the master spec. The v2 split into Common/Driver/Passenger tables is replaced by a single schema with role-specific optional fields. |
-| **FR-5** | Geolocation (Nominatim + ORS) | Accepted | 3 | Geocoding = public Nominatim (cached, 30-day TTL). Routing = ORS free tier (not OSRM; OSRM self-hosting deferred). Matrix chunked to 50 locations per call. |
+| **FR-5** | Geolocation (Nominatim + ORS) | Accepted | 3 | Geocoding = public Nominatim with production-wide 1 req/s limit and cache. Routing = hosted ORS; use fixtures in dev/staging. Enforce provider-wide plus per-user/per-session limits; current published limits are endpoint-specific (500 matrix and 2,000 directions calls/day). See master spec v3.1 and cost controls. |
 | **FR-6** | Matching Engine | Accepted | 4 | MVP solver = greedy heuristic, sync in Lambda (<300 users). Production solver (OR-Tools/LP) deferred. Deterministic for given input + seed. Versioned match items. |
 | **FR-7** | Matching Approval Workflow | Accepted | 5 | State machine `run → proposed → reviewed → approved → published` enforced server-side. Unapproved versions admin-only. |
 | **FR-8** | Manual Override | Accepted | 5 | Full override workflow in scope for MVP: move passenger (drag-to-reorder), unassign, lock/unlock, match version switching. Service contract (`PATCH /match/manual`) and admin UI both in scope. |
@@ -54,7 +54,7 @@ references it.
 ## 3. Content Moved to Master Spec
 
 The following content was produced during Phase 1 Discovery and has been incorporated
-into the master spec (`docs/functional_requirements_and_architecture.md` v3.0). This
+into the master spec (`docs/functional_requirements_and_architecture.md` v3.1). This
 baseline does not duplicate it.
 
 | Content | Spec location | ADR / Reference |
@@ -66,7 +66,7 @@ baseline does not duplicate it.
 | ORS free-tier routing (replacing OSRM) | §5 FR-5 (updated) | OSRM self-hosting deferred to post-MVP |
 | snake_case session status enum | §5 FR-2 (updated) | B3 resolution from consolidated review |
 | Next.js (App Router) locked as frontend framework | §15 (updated) | Not "React or Next.js" — decision is locked |
-| Idle cost corrected to ≤ $1/month | §10 Analytics (updated) | A9 advisory — CloudWatch Logs never $0 |
+| Near-zero shared account cost with safe back-pressure | §6 NFR-SCALE-2 (updated) | ADR-0015; supersedes A9 per-environment idle estimate |
 | AI agent note on team composition | §17 (added) | Solo dev + AI agents fill the recommended roles |
 
 ---
@@ -121,25 +121,22 @@ on 2026-06-24. All Phase 2-blocking findings were resolved in the close-out edit
 **Sign-off criteria** (all met — 2026-06-24):
 
 1. ✅ Every FR-1 through FR-11 has a row in §2 with an explicit Accepted / Clarified / Deferred status.
-2. ✅ The canonical registration schema in the master spec v3.0 §5 (FR-3/FR-4) is reviewed and approved by the Product Owner.
+2. ✅ The canonical registration schema in the master spec v3.1 §5 (FR-3/FR-4) is reviewed and approved by the Product Owner.
 3. ✅ All Open Questions in §4 are either Resolved or explicitly Deferred with an owner and target date.
-4. ✅ The NFRs in the master spec v3.0 §6 have no rows marked "needs definition".
-5. ✅ The master spec v3.0 and this baseline are committed on the default branch and linked from the Phase 1 plan's validation checklist.
+4. ✅ The NFRs in the master spec v3.1 §6 have no rows marked "needs definition".
+5. ✅ The master spec v3.1 and this baseline are committed on the default branch and linked from the Phase 1 plan's validation checklist.
 
-### 5.3 NFR-SCALE-2 — Idle Cost (Advisory A9)
+### 5.3 NFR-SCALE-2 — Cost Target (supersedes Advisory A9)
 
-**Resolution of A9.** Earlier draft text "Idle cost = $0" was factually wrong
-(CloudWatch Logs ingestion is never zero on an active AWS account). The wording is
-re-synced here from the master spec v3.0 §6.3 NFR-SCALE-2 to keep this baseline as
-the single sign-off record.
+The owner set a near-zero cost target. The former per-environment idle-cost target is replaced by
+the shared free provisioned-capacity model in [ADR-0015](adr/0015-cost-first-capacity-controls.md).
+Budgets are monitoring alerts, not spending caps.
 
 | NFR ID | Requirement | Measurement window | Verification |
 | --- | --- | --- | --- |
-| **NFR-SCALE-2** | **Idle cost ≤ $1/month** | 30 consecutive days with zero user traffic | Monthly AWS Cost Explorer review: total charges for `carpool-dev` environment (Lambda invocations, DynamoDB on-demand, CloudWatch Logs ingestion/storage, S3, Parameter Store) ≤ $1.00. Excludes one-time data-transfer and KMS key charges outside the environment. |
+| **NFR-SCALE-1/2** | **Near-zero cost with safe back-pressure** | Monthly bill and Phase 6 load test | Stay within the shared provisioned DynamoDB free pool by default; measure sustainable throughput; safely throttle/retry above capacity. One $5 account-wide AWS Budget notifies at 80% actual and 100% forecast spend. |
 
-This wording supersedes any earlier "$0 idle" claim and matches the master spec.
-Task 2.10 (CI/CD pipelines) was used to land this clarification; the cost-review
-gate can be added to the SRE runbook in Phase 6.
+This target and its assumptions are documented in `docs/cost-controls.md` and the Phase 2/6 plans.
 
 ---
 
@@ -149,11 +146,11 @@ gate can be added to the SRE runbook in Phase 6.
 | --- | --- | --- | --- |
 | FR-1 | 2 | `plans/phase-2-foundation.md` | ADR-0002 (JWT session) |
 | FR-2 | 2 | `plans/phase-2-foundation.md` | — |
-| FR-3, FR-4 | 3 | `plans/phase-3-registration.md` | Master spec v3.0 §5 (canonical schema) |
+| FR-3, FR-4 | 3 | `plans/phase-3-registration.md` | Master spec v3.1 §5 (canonical schema) |
 | FR-5 | 3 | `plans/phase-3-registration.md` | `docs/ideas/carpool-mvp-scope.md` (ORS choice) |
-| FR-6 | 4 | `plans/phase-4-matching-engine.md` | Master spec v3.0 §12 |
+| FR-6 | 4 | `plans/phase-4-matching-engine.md` | Master spec v3.1 §12 |
 | FR-7 | 5 | `plans/phase-5-approval-notification.md` | — |
 | FR-8 | 5 | `plans/phase-5-approval-notification.md` | — |
 | FR-9 | 5 | `plans/phase-5-approval-notification.md` | `docs/rbac_matrix.md` |
 | FR-10 | 5 | `plans/phase-5-approval-notification.md` | ADR-0008 (deferred delivery) |
-| FR-11 | 5 (write-path) / 6 (retention) | `plans/phase-5-approval-notification.md`, `plans/phase-6-hardening.md` | Master spec v3.0 §10 |
+| FR-11 | 5 (write-path) / 6 (retention) | `plans/phase-5-approval-notification.md`, `plans/phase-6-hardening.md` | Master spec v3.1 §10 |

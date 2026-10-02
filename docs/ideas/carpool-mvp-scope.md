@@ -1,5 +1,8 @@
 # Carpool Coordinator — Sharpened MVP Scope
 
+> Historical proposal, superseded by `docs/functional_requirements_and_architecture.md` v3 and
+> ADR-0001/ADR-0015. Its one-table DynamoDB and unqualified ORS-limit assumptions are not current.
+
 ## Problem Statement
 How might we deliver a working carpool-coordination web app for a specific NGO group in 3 weeks with a 4–6 person team — without the infrastructure of a venture-backed SaaS?
 
@@ -11,7 +14,7 @@ The original v2 architecture over-engineered three areas that are now cut: self-
 What makes this fit in 3 weeks is deferring everything that isn't on the critical path to participant-value: load testing, abuse-detection hardening, frontend accessibility/polish, and the security review are all post-MVP. The NGO's internal traffic doesn't need brute-force protection on day one.
 
 ## Key Assumptions to Validate
-- [ ] ORS free tier (2,000 req/day, 40 req/min) is sufficient for the NGO's session sizes — test with a 200-participant matrix call (200×200 = 40,000 entries; ORS matrix takes up to ~50 locations per call, so batching is required). Validate the batching approach early in Phase 3.
+- [ ] Validate ORS account's current endpoint-specific quotas and matrix-pair constraints using a controlled live integration check. Use fixtures in dev/staging; pre-filter and cache production matrix data.
 - [ ] Synchronous email send from Lambda stays under the 10s timeout — M365 Graph `sendMail` is typically <2s; a batch of 200 emails sent in a loop may exceed it. Validate the per-approval fan-out approach (loop with early-exit on timeout, log unsent, admin retry).
 - [ ] Single DynamoDB table with TTL items for rate-limiting holds up under the NGO's burst (a registration deadline surge). Validate with a 50-concurrent-registration smoke test.
 - [ ] The NGO group has a Google Workspace or consumer Google accounts for OIDC, and an M365 mailbox for the sender address. Confirm both before Phase 2.

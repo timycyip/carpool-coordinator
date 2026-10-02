@@ -1,7 +1,7 @@
 # ADR-0007: DynamoDB On-Demand Capacity
 
 ## Status
-Accepted
+Superseded by ADR-0015 for cost-first deployments
 
 ## Date
 2026-06-23
@@ -53,6 +53,11 @@ and any future tables (Phase 3+).
   sustained high traffic (thousands of requests/second, 24/7), switch to provisioned with
   auto-scaling — revisit in Phase 6 hardening.
 - **Action required:** Terraform sets `billing_mode = "PAY_PER_REQUEST"` on all DynamoDB tables.
+
+## Supersession
+The current cost-first deployment follows [ADR-0015](0015-cost-first-capacity-controls.md):
+provisioned capacity constrained to the account-level free allowance, with back-pressure
+above that capacity. This ADR remains as the record of the earlier on-demand decision.
 
 ## Links
 - ADR-0001 (tables per data model): `docs/adr/0001-table-naming-by-data-model.md`

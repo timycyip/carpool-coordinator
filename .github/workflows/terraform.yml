@@ -1,12 +1,14 @@
 name: Terraform
 
+# No production apply job exists; production promotion is intentionally disabled pending explicit approval.
+
 on:
   pull_request:
     branches:
-      - main
+      - master
   push:
     branches:
-      - main
+      - '**'
 
 permissions:
   contents: read
@@ -19,7 +21,7 @@ defaults:
 
 jobs:
   plan:
-    name: terraform plan
+    name: Terraform validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,12 +31,6 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ~1.9
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-2
 
       - name: terraform fmt
         run: terraform fmt -check -recursive
@@ -45,19 +41,16 @@ jobs:
       - name: terraform validate
         run: terraform validate
 
-      - name: terraform plan
-        if: github.event_name == 'pull_request'
-        env:
-          TF_VAR_environment: dev
-        run: terraform plan -input=false
-
-  apply:
-    name: terraform apply
+  apply-nonproduction:
+    name: Apply Terraform (dev or staging)
     runs-on: ubuntu-latest
     needs: plan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref_type == 'branch'
     environment:
-      name: production
+      name: ${{ github.ref == 'refs/heads/master' && 'staging' || 'dev' }}
+    env:
+      TF_VAR_environment: ${{ github.ref == 'refs/heads/master' && 'staging' || 'dev' }}
+      TF_VAR_cost_alert_email: ${{ secrets.COST_ALERT_EMAIL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,27 +63,23 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-2
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
 
       - name: terraform fmt
         run: terraform fmt -check -recursive
 
       - name: terraform init
-        run: |
-          # Bootstrap the S3 backend and DynamoDB lock table if missing
-          # (one-time; safe no-op once they exist)
-          terraform init -input=false
+        run: terraform init -input=false \
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+          -backend-config="dynamodb_table=${{ vars.TF_STATE_LOCK_TABLE }}" \
+          -backend-config="key=infra/${TF_VAR_environment}/terraform.tfstate"
 
       - name: terraform validate
         run: terraform validate
 
       - name: terraform plan
-        env:
-          TF_VAR_environment: dev
         run: terraform plan -input=false -out=tfplan
 
       - name: terraform apply
-        env:
-          TF_VAR_environment: dev
         run: terraform apply -input=false -auto-approve tfplan

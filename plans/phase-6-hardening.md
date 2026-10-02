@@ -1,5 +1,7 @@
 # Phase 6 — Hardening Plan
 
+**Status: Incomplete — deferred until Phases 2–5 are complete; only the explicitly marked MVP observability and readiness items are in scope earlier.**
+
 > **3-WEEK MVP NOTE:** Most of Phase 6 is DEFERRED to post-MVP. For the 3-week MVP, only the observability pipeline (CloudWatch → S3 → Athena) and a basic production-readiness checklist are in scope. The observability pipeline should be set up during Phase 2 (foundation), not deferred to a hardening sprint. Load testing, security review, abuse detection, frontend polish, and restore drills are post-MVP.
 
 Builds on Phases 2–5 (fully functional platform). Goal: production readiness — load testing, security review, observability, rate-limit tuning, and abuse detection, plus frontend resilience.
@@ -19,15 +21,15 @@ No Phase 1 advisories directly target Phase 6. However, Phase 6 is the home for 
 ---
 
 ## Open Questions (to refine)
-- [ ] Load test targets: confirm expected peak (5000 req/min per NFR) and session sizes for matching stress (100/300/500 users)?
+- [ ] Load test targets: measure sustainable traffic within the pooled provisioned free capacity; verify safe back-pressure above it and measure matching provider calls for 100/300-user sessions.
 - [ ] Security review: internal review only, or external penetration test? If external, what scope/budget?
-- [ ] Observability dashboards: CloudWatch dashboards + Athena, or add a third-party APM (Datadog/Grafana)? Recommend CloudWatch + Athena only to keep idle cost $0.
-- [ ] Backup/restore for DynamoDB: PITR on, plus on-demand backups — confirm recovery RPO/RTO targets.
+- [ ] Observability dashboards: CloudWatch dashboards + Athena, or add a third-party APM (Datadog/Grafana)? Recommend CloudWatch Logs + Athena; avoid custom metrics/dashboards unless their value justifies recurring charges.
+- [ ] Confirm production-only PITR recovery targets and restore drill; keep dev/staging disposable without PITR.
 - [ ] On-call: who receives CloudWatch alarms? Define an alarm routing target (Slack/email/SNS).
-- [ ] Cost ceiling: monthly budget alert threshold per environment?
+- [x] Cost target: near-zero; use one account-wide $5 monthly AWS Budget alert managed by dev Terraform at 80% actual / 100% forecast. This is notification only, not a hard cap. Tune after observed spend.
 
 ## Goal
-A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, matching <30s for 500 users, 99.5% availability, burst to 5000 req/min, security controls).
+A production-ready system with measured latency/availability, provider-bounded matching, cost-first provisioned capacity, safe retry/back-pressure above free throughput, and security controls.
 
 ## Decisions (locked)
 - Observability: CloudWatch Logs → S3 (30-day lifecycle) → Athena (Section 10). Avoid verbose success logging. **Note:** the observability pipeline is set up during Phase 2 (foundational infra), not deferred to Phase 6.
@@ -39,9 +41,9 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 ## Tasks (ordered)
 
 ### Backend / Infra
-1. **Load testing**: scripts (k6 or Locust) for: API burst (5000 req/min sustained), registration surge, matching run at 300 and 500 users. Capture p95/p99 latency, error rate, Lambda concurrency/throttling, DynamoDB consumed capacity.
+1. **Load testing**: scripts (k6 or Locust) for registration surges within configured DynamoDB capacity and above-capacity back-pressure, plus matching at representative sizes. Capture p95/p99 latency, error rate, Lambda concurrency/throttling, table/GSI consumed capacity, and provider calls.
 2. **Concurrency tuning**: set Lambda reserved concurrency to bound cost spikes (Risk table) while meeting burst demand. Right-size memory (256 MB baseline, raise for matching if needed).
-3. **DynamoDB capacity**: switch tables from default on-demand to provisioned if load is predictable, or keep on-demand with autoscaling. Enable PITR on `app_data`; define on-demand backup cadence + restore drill.
+3. **DynamoDB capacity**: begin with the account-pooled provisioned free allowance per ADR-0015. Load test the configured capacities and record throttling/back-pressure; require explicit cost acceptance before adding provisioned units beyond the shared free allowance. Enable PITR only in production; non-production is fixture-backed and disposable.
 4. **Rate-limit tuning**: validate 60/min IP and 120/min user under load; adjust buckets to protect auth + matching endpoints without blocking legit burst registration.
 5. **Abuse detection hardening**: brute-force thresholds for login + session-code attempts; exponential backoff schedule; temporary ban enforcement; CloudWatch alarm on ban-rate spikes.
 6. **Security review**: JWT verification paths, session-code brute-force, IDOR on `GET /sessions/{code}/me` and admin endpoints, SSRF on geocode/ORS client, secrets not logged, DynamoDB encryption at rest, least-privilege IAM roles per Lambda.
@@ -77,11 +79,11 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - [MVP] IDOR check: user A cannot access user B's registration via `GET /sessions/{code}/me` (→ 403)
 
 **Deferred (post-MVP):**
-- NFRs met: p95 API latency < 800ms; matching <30s for 500 users; 5000 req/min burst sustained without 5xx spike; 99.5% availability over a test window (load tests — 6.1)
+- NFRs measured: API latency/availability, matching runtime and external-provider request count, provisioned-capacity throughput, and safe back-pressure above that capacity (load tests — 6.1)
 - Security review: no critical/high findings open at sign-off (6.5)
 - Rate limiter blocks abuse patterns without impacting legit users (6.4)
 - Email Lambda DLQ drains cleanly; no duplicate emails on replay
-- Restore drill: DynamoDB PITR restore to a point in time succeeds in a staging table (6.3)
+- Restore drill: production PITR restore to a point in time succeeds into a staging table (6.3)
 - Lighthouse: key routes ≥ target scores (6.8)
 
 ## Dependencies
@@ -104,7 +106,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 
 ### Task 6.1: Load testing scripts [DEFERRED]
 
-**Description:** Write load test scripts (k6 or Locust) for: API burst (5000 req/min sustained), registration surge, matching run at 100/300/500 users. Capture p95/p99 latency, error rate, Lambda concurrency, DynamoDB consumed capacity.
+**Description:** Write load test scripts (k6 or Locust) for registration surges within configured DynamoDB capacity and above-capacity back-pressure, plus matching at representative sizes. Capture p95/p99 latency, error rate, Lambda concurrency/throttling, table/GSI consumed capacity, and provider calls.
 
 **Acceptance criteria:**
 - [ ] k6 (or Locust) scripts for API burst, registration surge, matching stress
@@ -116,8 +118,8 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 **Verification:**
 - [ ] Manual check: run burst test against staging → NFRs evaluated
 - [ ] NFR check: p95 API latency < 800ms
-- [ ] NFR check: matching < 30s for 500 users
-- [ ] NFR check: 5000 req/min sustained without 5xx spike
+- [ ] Record matching performance and ORS request counts at 100/300 users; 500-user sync target is conditional on quota-compatible matrix generation
+- [ ] Above-capacity load receives safe, retryable back-pressure without silent registration loss
 
 **Dependencies:** Phases 2–5 complete
 
@@ -143,7 +145,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 
 **Verification:**
 - [ ] Manual check: re-run burst test → no throttling with reserved concurrency
-- [ ] Manual check: matching at 500 users completes within timeout
+- [ ] Manual check: configured MVP session size completes within timeout and provider quota
 
 **Dependencies:** Task 6.1
 
@@ -153,20 +155,20 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 
 **Estimated scope:** S
 
-### Task 6.3: DynamoDB capacity + PITR + backup drill [DEFERRED] (PITR enabled in Phase 2; restore drill post-MVP)
+### Task 6.3: DynamoDB capacity + production PITR + backup drill [DEFERRED]
 
-**Description:** Finalize DynamoDB capacity mode (on-demand vs provisioned with autoscaling). Confirm PITR on `app_data`. Conduct a restore drill to a staging table to validate RPO/RTO.
+**Description:** Measure provisioned throughput and throttling against real request patterns. Keep dev/staging PITR disabled. Before production is enabled, confirm PITR on production `app_data` and conduct a restore drill into a separate staging table. Treat capacity above the free account pool as a cost decision.
 
 **Acceptance criteria:**
-- [ ] Capacity mode decision documented (on-demand for bursty, provisioned for predictable)
-- [ ] PITR enabled on `app_data`
+- [ ] Provisioned capacities and account-wide free-pool allocation documented; any higher allocation includes cost estimate and explicit approval
+- [ ] PITR enabled on production `app_data`; disabled in dev/staging
 - [ ] Restore drill: restore `app_data` to a point in time → staging table → verify data integrity
 - [ ] On-demand backup cadence defined (if applicable)
 - [ ] RPO/RTO targets documented
 
 **Verification:**
 - [ ] Manual check: restore to 5 minutes ago → staging table has expected records
-- [ ] Manual check: PITR status = ENABLED on `app_data`
+- [ ] Manual check: production PITR status = ENABLED; dev/staging = DISABLED
 
 **Dependencies:** Task 2.2
 
@@ -292,7 +294,7 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 - [ ] `docs/production_readiness.md` with sign-off checklist (NFRs, security, observability)
 - [ ] Runbooks: matching timeout, DLQ drain, DynamoDB restore, ORS quota exhaustion, mass notification failure
 - [ ] Each runbook: symptoms, diagnosis steps, resolution, escalation contact
-- [ ] NFR sign-off: p95 < 800ms, matching < 30s, 99.5% availability, 5000 req/min burst
+- [ ] NFR sign-off records measured latency/availability, provider quota behavior, sustainable provisioned throughput, and tested back-pressure
 
 **Verification:**
 - [ ] Manual check: walk through DLQ drain runbook → messages reprocessed
@@ -329,6 +331,6 @@ A hardened, observable, production-ready system meeting the NFRs (p95 < 800ms, m
 |------|--------|------------|
 | Load tests reveal NFR not met | High | Document gap; either fix in this phase or defer to known-limitation; do not launch |
 | Security finding discovered late | High | Triage within 48h; critical/high blocks launch |
-| ORS free-tier quota exhausted (2000 req/day) during large-session matching | Medium | Monitor daily quota usage via CloudWatch alarm at 80%; cache matrix results per session; haversine pre-filter reduces ORS calls |
+| ORS matrix quota exhausted during large-session matching | High | Dev/staging fixtures; verify actual endpoint quotas; account-wide provider limiter plus per-user/per-session run limits; cache matrix results and pre-filter pairs; expose retryable quota errors |
 | Observability blind spot (missing alarm) | Medium | Failure-mode review per resource; dry-run alarms |
 | DynamoDB restore drill corrupts production | Medium | Restore to separate staging table; never overwrite prod |

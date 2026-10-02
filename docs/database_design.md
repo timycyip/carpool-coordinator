@@ -57,14 +57,15 @@ Keeping them separate lets us tune TTL, backup, and operational behavior indepen
 
 ## Operational Notes
 
-- All tables use `PAY_PER_REQUEST` (ADR-0007).
+- All tables use provisioned capacity, initially 1 RCU/1 WCU per table and GSI (ADR-0015). The free provisioned pool is account/region-wide and does not reset per environment.
 - All tables have SSE enabled.
-- `app_data` has PITR enabled; cache tables do not.
+- PITR is disabled in dev/staging; production must enable it when that environment is authorized.
 - `app_data` should be protected with deletion protection in non-dev environments.
 - Terraform state should be remote and locked before production deployment.
 
 ## References
 
 - [ADR-0001: Tables Named Per Data Model](adr/0001-table-naming-by-data-model.md)
-- [ADR-0007: DynamoDB On-Demand Capacity](adr/0007-dynamodb-on-demand.md)
+- [ADR-0015: Cost-First Capacity and Non-Production Data Protection](adr/0015-cost-first-capacity-controls.md)
+- [ADR-0007: DynamoDB On-Demand Capacity (superseded)](adr/0007-dynamodb-on-demand.md)
 - [Data Model & ERD](data_model_erd.md)

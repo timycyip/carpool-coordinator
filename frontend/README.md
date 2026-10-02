@@ -1,7 +1,7 @@
 # Frontend — Carpool Coordinator
 
 Next.js 16 (App Router) + TypeScript + Tailwind v4 frontend for the Carpool Coordinator platform.
-Deployed to Cloudflare Pages via `@cloudflare/next-on-pages`.
+Deployed as a static export to Cloudflare Pages with a Pages Function proxy for `/api/*`.
 
 ## Quick Start
 
@@ -17,21 +17,24 @@ npm run dev                    # http://localhost:3000
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start Next.js dev server (Turbopack) |
-| `npm run build` | Production build (webpack, required for next-on-pages) |
+| `npm run build` | Production static export |
 | `npm run lint` | ESLint |
 | `npx tsc --noEmit` | TypeScript type check |
 | `npm test` | Vitest (api-client tests) |
 | `npm run test:watch` | Vitest in watch mode |
-| `npm run pages:build` | Cloudflare Pages build (`@cloudflare/next-on-pages`) |
-| `npm run pages:deploy` | Deploy to Cloudflare Pages |
+| `npm run pages:build` | Static Next.js export into `out/` |
+| `npm run pages:deploy` | Deploy static assets and the `/api/*` Pages Function |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Backend API base URL. Used only in `next.config.ts` rewrites — the client always calls `/api/*` (same-origin). |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Local Next.js development rewrite target. Cloudflare Pages routes `/api/*` through its Pages Function to the environment's Lambda URL. |
 
-See `.env.example` for the template.
+In Cloudflare Pages Preview runtime settings, configure `DEV_API_ORIGIN` and
+`STAGING_API_ORIGIN` from the Terraform Function URL outputs. The Pages Function
+uses `CF_PAGES_BRANCH` to select the matching API. See
+[`docs/dev-deployment-setup.md`](../docs/dev-deployment-setup.md).
 
 ## Architecture
 
@@ -50,7 +53,8 @@ frontend/
 │       ├── api-client.test.ts  # Vitest tests (colocated)
 │       ├── auth-context.tsx    # React auth context (login/logout/isAuthenticated)
 │       └── route-guard.tsx     # ProtectedRoute component (redirects to /login)
-├── next.config.ts              # Same-origin rewrites (/api/* → backend)
+├── next.config.ts              # Static export in production; localhost rewrite in dev
+├── functions/api/[[path]].ts   # Same-origin API proxy for Pages Function URL
 ├── wrangler.toml               # Cloudflare Pages config
 ├── vitest.config.ts            # Test runner config
 └── .env.example                # Environment template
@@ -61,7 +65,7 @@ frontend/
 | Decision | ADR |
 |----------|-----|
 | JWT stored in-memory (no localStorage/sessionStorage) | [ADR-0002](../docs/adr/0002-app-session-jwt.md) |
-| Same-origin API via `next.config.ts` rewrites | [ADR-0004](../docs/adr/0004-same-origin-rewrites.md) |
+| Static export plus `/api/*` Pages Function proxy | [ADR-0016](../docs/adr/0016-static-pages-api-proxy.md) |
 | 401 → subscriber pattern (api-client notifies auth-context) | [ADR-0009](../docs/adr/0009-unauthorized-subscriber-pattern.md) |
 
 ### API Client (`src/lib/api-client.ts`)

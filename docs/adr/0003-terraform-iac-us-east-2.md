@@ -9,7 +9,7 @@ Accepted — human-reviewed and confirmed 2026-06-23
 ## Context
 Phase 2 provisions AWS infrastructure (Lambda, DynamoDB tables, Parameter Store, S3, IAM, Lambda
 Function URL). This infrastructure must be version-controlled, reproducible, and deployable via
-CI/CD. The region choice also constrains OSRM extract geography (Phase 4) and general latency to
+CI/CD. The region choice also constrains general latency to
 end users.
 
 Forces at play:
@@ -63,7 +63,10 @@ The Terraform workspace lives in `infra/` at the repo root. It provisions:
 - **Action required:** Task 2.10 sets up the Terraform S3 backend, the GitHub Actions workflow
   (`terraform init && terraform plan` on PR; `terraform apply` on main), and the initial Lambda +
   DDB + S3 resources.
-- **Region locked to `us-east-2`** — affects latency to users and OSRM extract geography in Phase 4.
+- **Trust note:** GitHub Actions runs on GitHub-hosted runners and federates to AWS via OIDC. PR
+  workflows may only assume the plan/read role; main-branch workflows assume the apply role. The
+  role ARN is supplied from repo/environment config, not long-lived AWS access keys.
+- **Region locked to `us-east-2`** — affects latency to users and AWS service pricing.
 
 ## Links
 - Phase 2 plan Task 2.2 (DynamoDB schema): `plans/phase-2-foundation.md`

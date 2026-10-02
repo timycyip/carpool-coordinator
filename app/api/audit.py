@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Query
 
+from app.config import app_data_table_name
 from app.db import get_ddb_client
 from app.middleware.rbac import require_role
 from app.models.audit import AuditEvent, PaginatedResponse
@@ -109,7 +110,7 @@ async def list_audit_events(
     start_date = _parse_date(from_, "from") if from_ else today
     end_date = _parse_date(to, "to") if to else start_date
 
-    repo = AuditRepository(table_name="app_data", client=client)
+    repo = AuditRepository(table_name=app_data_table_name(), client=client)
     filters = _build_filters(event_type, session_code)
 
     items: list[AuditEvent] = []

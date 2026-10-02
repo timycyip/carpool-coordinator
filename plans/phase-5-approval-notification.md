@@ -1,5 +1,7 @@
 # Phase 5 — Approval & Notification Plan
 
+**Status: Incomplete — not started; blocked on completion of Phase 4 matching.**
+
 Builds on Phase 4 (proposed, editable matches). Goal: admin approves a match version, it becomes visible to assigned participants, email notifications are queued per [ADR-0008](../docs/adr/0008-deferred-notification-delivery.md) and sent via an SQS → Lambda consumer through Microsoft Graph `sendMail` to M365 Exchange, and all actions are audit-logged. Reverses the earlier Phase 1 decision for synchronous sendMail.
 
 ---
@@ -41,6 +43,7 @@ Close the loop: approve → publish → queue notifications → notify via SQS c
 - Notifications (FR-10, MVP): registration success, matching approved, match changed, session cancelled.
 - Audit logging (FR-11): login attempts, auth failures, session changes, matching approvals, admin overrides.
 - Idempotent sends keyed by event ID + recipient; on send failure the SQS consumer retries with exponential backoff (3 attempts) and marks permanently failed items for admin review via the audit log.
+- Dev/staging and automated tests use a deterministic notification sink or mocked Graph client. They do not send real email by default. Controlled end-to-end delivery is opt-in and uses an allowlisted test mailbox.
 
 ## Tasks (ordered)
 

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.auth.jwt import create_app_token
 from app.auth.oidc import InvalidTokenError, verify_google_token
+from app.config import app_data_table_name
 from app.db import get_ddb_client
 from app.middleware.audit import (
     EVENT_AUTH_LOGIN_FAILURE,
@@ -36,7 +37,6 @@ if TYPE_CHECKING:
 
 router = APIRouter(tags=["auth"])
 
-_TABLE_NAME = "app_data"
 _TTL_SECONDS = 3600
 
 
@@ -86,7 +86,7 @@ async def login_with_google(
             detail=body.model_dump(),
         ) from exc
 
-    repo = UserRepository(table_name=_TABLE_NAME, client=client)
+    repo = UserRepository(table_name=app_data_table_name(), client=client)
     record = await repo.upsert(
         sub=google_user.sub,
         email=google_user.email,

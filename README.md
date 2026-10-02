@@ -118,6 +118,10 @@ infra/                      IaC (Terraform) — Phase 2+
 frontend/                   Next.js app — Phase 2+
 ```
 
+For the non-production branch promotion model, GitHub/AWS/Cloudflare setup,
+and Terraform state bootstrap steps, see
+[`docs/dev-deployment-setup.md`](docs/dev-deployment-setup.md).
+
 ### Key Design Decisions
 
 | Decision | ADR / Doc |

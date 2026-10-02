@@ -22,3 +22,18 @@ output "geocode_cache_table_name" {
   description = "Name of the geocode_cache DynamoDB table"
   value       = aws_dynamodb_table.geocode_cache.name
 }
+
+output "api_function_name" {
+  description = "Name of the non-production backend Lambda function"
+  value       = aws_lambda_function.api.function_name
+}
+
+output "api_function_url" {
+  description = "Public HTTPS endpoint for the backend API"
+  value       = aws_lambda_function_url.api.function_url
+}
+
+output "lambda_artifact_bucket_name" {
+  description = "Private S3 bucket used by CI to upload backend deployment packages"
+  value       = aws_s3_bucket.lambda_artifacts.bucket
+}

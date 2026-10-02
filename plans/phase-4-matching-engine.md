@@ -1,5 +1,7 @@
 # Phase 4 — Matching Engine Plan
 
+**Status: Incomplete — not started; blocked on completion of Phase 3 registration.**
+
 Builds on Phase 3 (registrations with geocoded locations). Most complex phase. Goal: a CVRPTW-based greedy matching engine producing versioned proposed matches, with admin review/edit UI.
 
 ---
@@ -38,7 +40,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 - Algorithm adapted from existing `src/main.py` distance-matrix approach, relocated to `app/services/matching.py` and enhanced for CVRPTW.
 - Four-stage pipeline (Section 12): geographic clustering → candidate filtering → cost matrix → optimization.
 - Cost function: `score = distance_weight*detour + time_weight*lateness + load_weight*imbalance`.
-- Matrix API (OpenRouteService free-tier `/v2/matrix`) required for efficient candidate scoring. Batched for sessions >50 participants.
+- Routing provider is injectable: deterministic fixtures for tests/dev/staging; production uses cached OpenRouteService only after geographic/candidate pre-filtering. Enforce account-wide provider quotas and per-user/per-session matching limits before consuming quota.
 - Match versioning: each `POST /match/run` writes `MATCH#V{n+1}`; only one version approved per session.
 - Proposed matches hidden from drivers/passengers until approval (Phase 5).
 - Async + OR-Tools production solver deferred (noted as future enhancement).
@@ -49,7 +51,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 1. **Relocate + refactor existing matcher**: move `src/main.py` distance-matrix + geocode helpers into `app/services/matching.py` and `app/services/geocode.py`. Remove CLI/pandas-CSV I/O; operate on registration data from DynamoDB. Keep `test/` suite ported to operate on repository data.
 2. **Stage 1 — Geographic clustering**: cluster drivers/passengers by postal-code proximity to prune the search space (Section 12 Stage 1).
 3. **Stage 2 — Candidate filtering**: discard infeasible driver↔passenger pairs (detour > driver max, no schedule overlap, no remaining seat, arrival/departure constraint violation).
-4. **Stage 3 — Cost matrix**: build driver× passenger cost matrix using ORS `/v2/matrix` for actual road distances/durations. Compute per-pair score via the cost function (detour, lateness, imbalance). Batched for sessions >50 participants.
+4. **Stage 3 — Cost matrix**: pre-filter with geodesic distance, then request only the remaining driver/passenger pairs from ORS `/v2/matrix`; cache matrices per session and input version. Respect account-wide daily/minute quotas, 3,500-pair request cap, and per-user/per-session match-run limits. Use fixtures in dev/staging.
 5. **Stage 4 — Greedy optimization**: assign passengers greedily by ascending score subject to seat capacity + time-window feasibility. Track unmatched passengers and over-capacity/under-capacity drivers.
 6. **Matching APIs**: `POST /sessions/{code}/match/run` (Session Admin) — runs engine, writes `MATCH#V{n+1}` as `Matching Pending → Matching Proposed`. `GET /sessions/{code}/match` — latest proposed match (admin only). `PATCH /sessions/{code}/match/manual` — admin override (move/unassign/lock).
 7. **Idempotency table + `match/run` idempotency** (deferred from Phase 2): add `idempotency` table to `docs/data_model_erd.md` §1 with PK=`IDEMPOTENCY#<sub>#<session>#<key>`, SK=`METADATA`, TTL=24h. Provision the table in Terraform (`infra/idempotency.tf`). Implement idempotency-key logic in `POST /sessions/{code}/match/run` per `docs/api_contracts.md` §1.6: on repeat key within 24h, return original response without re-running the engine. Scope: `(sub, {code})`.
@@ -70,7 +72,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 - Matching APIs (`run`, `get`, `manual`) with versioning.
 - **`infra/idempotency.tf`** — `idempotency` DynamoDB table (deferred from Phase 2) for `POST /match/run` idempotency-key support per §1.6.
 - Admin matching review/edit UI with route maps and scores.
-- Performance: <30s for 500 users (NFR), synchronous in Lambda.
+- MVP target: <30s for up to 300 users only when the pruned/cached matrix stays within the synchronous Lambda and ORS quotas. Larger sessions require a measured async/cached design.
 
 ## Validation
 - Hard constraints always satisfied in output (seat capacity, schedule, geographic feasibility).
@@ -78,11 +80,11 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 - Unmatched passengers explicitly listed, not silently dropped.
 - Drivers/passengers cannot see proposed matches (FR-9 + FR-7 pre-approval).
 - Manual override that violates a hard constraint is rejected with a clear reason.
-- Performance test: 500-user synthetic session completes <30s in Lambda.
+- Performance test: measure representative 100/300-user sessions and provider-call counts; 500-user target is post-MVP and conditional on quota-compatible matrix generation.
 - Existing `test/test_match_riders_*.py` ported and passing on new data path.
 
 ## Dependencies
-- Phase 3: registrations + geocoded locations + ORS free-tier `/v2/matrix` + `/v2/directions`.
+- Phase 3: registrations + geocoded locations + fixture-backed routing client and production ORS quotas/cache.
 - Phase 2: session lifecycle + RBAC.
 - Phase 1: ERD match versioning, API contracts for matching endpoints.
 
@@ -169,12 +171,12 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 
 ### Task 4.4: Stage 3 — Cost matrix via ORS [MVP]
 
-**Description:** Build the driver×passenger cost matrix using ORS `/v2/matrix` for actual road distances/durations. Compute per-pair score: `score = distance_weight*detour + time_weight*lateness + load_weight*imbalance`. Lower score = better.
+**Description:** Build a bounded candidate cost matrix using a provider interface: deterministic fixtures for dev/staging/tests and cached, quota-limited ORS calls in production. Pre-filter candidate pairs geographically before requesting road distances/durations. Compute per-pair score: `score = distance_weight*detour + time_weight*lateness + load_weight*imbalance`. Lower score = better.
 
 **Acceptance criteria:**
-- [ ] Fetches road distance/duration matrix from ORS `/v2/matrix` for all candidate pairs
-- [ ] Batches matrix calls for >50 locations (chunked ORS calls + merge into single cost matrix)
-- [ ] Client-side throttling respects ORS free-tier 40 req/min limit
+- [ ] Fixture provider is the default in dev/staging/tests; live ORS requires explicit opt-in outside production.
+- [ ] Production checks account-wide daily/minute quota and per-user/per-session run limit before calls; cached matrices do not consume provider quota again.
+- [ ] Matrix pair count stays within current ORS request caps; candidate pre-filtering avoids unneeded all-pairs calls.
 - [ ] Computes detour (extra distance vs direct driver→destination)
 - [ ] Computes lateness (arrival time vs session cutoff)
 - [ ] Computes imbalance (driver load vs average)
@@ -184,7 +186,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 
 **Verification:**
 - [ ] Tests pass: `pytest tests/services/test_cost_matrix.py -v`
-- [ ] Manual check: 5 drivers × 10 passengers → 50-element cost matrix via ORS with sensible scores
+- [ ] Controlled live integration check: 5 drivers × 10 passengers → cost matrix via ORS with sensible scores; run only after fixture-based checks pass.
 
 **Dependencies:** Task 3.3 (routing client, ORS-based), Task 4.3
 
@@ -235,7 +237,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 **Verification:**
 - [ ] Tests pass: `pytest tests/api/test_matching.py -v`
 - [ ] Manual check: run matching on a test session, verify versioned output in DynamoDB
-- [ ] Performance test: 500-user synthetic session completes < 30s in Lambda
+- [ ] Performance test records latency, throttles, and provider-call counts for representative sizes; do not require uncached 500-user sync matching.
 
 **Dependencies:** Task 4.5, Task 2.2
 
@@ -335,7 +337,7 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 - [ ] All tests pass (including ported tests from original `src/main.py`)
 - [ ] Matching runs on a test session and produces sensible assignments
 - [ ] Admin can review, override, and re-run matching
-- [ ] Performance: <30s for 500 users (ORS batched matrix calls may extend runtime; validate with a 200-user session)
+- [ ] Performance check records elapsed time and ORS calls for representative sizes. Do not promise 500 users in 30 seconds with uncached hosted matrices unless a benchmark demonstrates the candidate matrix fits published rate and pair limits; large jobs use cached/pruned results or an approved asynchronous path.
 - [ ] Proposed matches hidden from drivers/passengers
 - [ ] **Review with human before proceeding to Phase 5**
 
@@ -350,6 +352,6 @@ A matching engine that takes a session's drivers + passengers + constraints and 
 | Matching exceeds Lambda timeout (>15 min) | High | Sync only for <300; refuse >300 with clear message; async path is future |
 | Existing `src/main.py` tests break on refactor | Medium | Port incrementally (4.1); keep `src/` as reference until ported tests pass |
 | Greedy algorithm produces poor assignments | Medium | Surface per-pair scores to admin; manual override always available |
-| ORS free-tier rate limit (40 req/min) throttles large-session matrix calls | Medium | Batch + cache matrix per session; haversine pre-filter reduces candidate set before ORS call |
+| ORS account quota is exhausted by a large match run | High | Fixture dev/staging; verify actual endpoint quotas; account-wide provider limiter plus per-user/per-session run limits; cache results and pre-filter pairs; expose retryable quota errors |
 | Non-deterministic output blocks audit | Low | Seeded random; same input → same output tested in 4.5 |
 | Visibility leak in proposed match (driver sees other drivers) | High | Server-side filter in `GET /match`; never return other drivers' data pre-approval |

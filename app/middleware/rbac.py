@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Callable
 
 from fastapi import Depends, HTTPException, Request, status
 
+from app.config import app_data_table_name
 from app.db import get_ddb_client
 from app.middleware.auth import get_current_user
 from app.models.auth import TokenPayload
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
     from mypy_boto3_dynamodb import DynamoDBClient
 
 
-_TABLE_NAME = "app_data"
 _PK_SESSION = "SESSION"
 _PK_USER = "USER"
 _SK_ADMIN = "ADMIN"
@@ -82,7 +82,7 @@ async def _lookup_session_roles(
     """
     scoped: set[Role] = set()
     admin_resp = ddb_client.get_item(
-        TableName=_TABLE_NAME,
+        TableName=app_data_table_name(),
         Key={
             "PK": {"S": f"{_PK_SESSION}#{session_code}"},
             "SK": {"S": f"{_SK_ADMIN}#{user.sub}"},
@@ -92,7 +92,7 @@ async def _lookup_session_roles(
         scoped.add(Role.SESSION_ADMIN)
 
     reg_resp = ddb_client.get_item(
-        TableName=_TABLE_NAME,
+        TableName=app_data_table_name(),
         Key={
             "PK": {"S": f"{_PK_SESSION}#{session_code}"},
             "SK": {"S": f"{_SK_REG}#{user.sub}"},

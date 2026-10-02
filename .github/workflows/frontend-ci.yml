@@ -1,12 +1,14 @@
 name: Frontend CI
 
+# No production deployment job exists; production promotion is intentionally disabled pending explicit approval.
+
 on:
   push:
     branches:
-      - "**"
+      - '**'
   pull_request:
     branches:
-      - main
+      - master
 
 permissions:
   contents: read
@@ -78,7 +80,7 @@ jobs:
         run: npm test
 
   build:
-    name: Build (next build)
+    name: Build (Cloudflare Pages)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -94,26 +96,23 @@ jobs:
       - name: npm ci
         run: npm ci
 
-      - name: next build (Cloudflare Pages output)
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Pages-specific build
         run: npm run pages:build
 
       - name: Upload Pages output
         uses: actions/upload-artifact@v4
         with:
           name: pages-output
-          path: frontend/.vercel/output/static
+          path: frontend/out
           retention-days: 7
 
-  deploy-preview:
-    name: Deploy preview (Cloudflare Pages)
+  deploy-pages:
+    name: Deploy Cloudflare Pages (dev or staging)
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test, build]
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref_type == 'branch'
     environment:
-      name: preview
+      name: ${{ github.ref == 'refs/heads/master' && 'staging' || 'dev' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,53 +129,19 @@ jobs:
 
       - name: Build for Cloudflare Pages
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
         run: npm run pages:build
 
-      - name: Deploy preview
+      - name: Deploy non-production Pages branch
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'carpool-coordinator' }}
+          PAGES_BRANCH: ${{ github.ref == 'refs/heads/master' && 'staging' || 'dev' }}
         run: |
-          npx wrangler pages deploy .vercel/output/static \
-            --project-name carpool-coordinator \
-            --branch "${{ github.ref_name }}" \
-            --commit-dirty=true
-
-  deploy-production:
-    name: Deploy production (Cloudflare Pages)
-    runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment:
-      name: production
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: npm ci
-        run: npm ci
-
-      - name: Build for Cloudflare Pages
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npm run pages:build
-
-      - name: Deploy production
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          npx wrangler pages deploy .vercel/output/static \
-            --project-name carpool-coordinator \
-            --branch main \
+          npx wrangler pages deploy out \
+            --project-name "${CLOUDFLARE_PAGES_PROJECT}" \
+            --branch "${PAGES_BRANCH}" \
             --commit-dirty=true

@@ -5,14 +5,16 @@ locals {
 # ---------------------------------------------------------------------------
 # 1. app_data — all business entities (single-table PK/SK overloading)
 #    GSIs: sessions-by-user, admins-by-user
-#    PITR enabled; NO TTL (durable business data)
+#    production PITR only; NO TTL (durable business data)
 # ---------------------------------------------------------------------------
 resource "aws_dynamodb_table" "app_data" {
-  name              = "${local.name_prefix}-app-data"
-  billing_mode      = "PAY_PER_REQUEST"
-  hash_key          = "PK"
-  range_key         = "SK"
-  deletion_protection = true
+  name                        = "${local.name_prefix}-app-data"
+  billing_mode                = "PROVISIONED"
+  read_capacity               = 1
+  write_capacity              = 1
+  hash_key                    = "PK"
+  range_key                   = "SK"
+  deletion_protection_enabled = true
 
   attribute {
     name = "PK"
@@ -46,20 +48,42 @@ resource "aws_dynamodb_table" "app_data" {
 
   global_secondary_index {
     name            = "gsi_sessions_by_user"
-    hash_key        = "gsi1_pk"
-    range_key       = "gsi1_sk"
     projection_type = "ALL"
+    read_capacity   = 1
+    write_capacity  = 1
+
+    key_schema {
+      attribute_name = "gsi1_pk"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "gsi1_sk"
+      key_type       = "RANGE"
+    }
   }
 
   global_secondary_index {
     name            = "gsi_admins_by_user"
-    hash_key        = "gsi2_pk"
-    range_key       = "gsi2_sk"
     projection_type = "ALL"
+    read_capacity   = 1
+    write_capacity  = 1
+
+    key_schema {
+      attribute_name = "gsi2_pk"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "gsi2_sk"
+      key_type       = "RANGE"
+    }
   }
 
+  # Keep non-production free of continuous backup charges. Production must
+  # explicitly enable PITR when the production environment is authorized.
   point_in_time_recovery {
-    enabled = true
+    enabled = var.environment == "prod"
   }
 
   server_side_encryption {
@@ -71,10 +95,12 @@ resource "aws_dynamodb_table" "app_data" {
 # 2. session_cache — session-scoped ephemeral state (TTL)
 # ---------------------------------------------------------------------------
 resource "aws_dynamodb_table" "session_cache" {
-  name         = "${local.name_prefix}-session-cache"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+  name           = "${local.name_prefix}-session-cache"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = 1
+  write_capacity = 1
+  hash_key       = "PK"
+  range_key      = "SK"
 
   attribute {
     name = "PK"
@@ -100,10 +126,12 @@ resource "aws_dynamodb_table" "session_cache" {
 # 3. rate_limit_cache — per-IP / per-user request counters (TTL)
 # ---------------------------------------------------------------------------
 resource "aws_dynamodb_table" "rate_limit_cache" {
-  name         = "${local.name_prefix}-rate-limit-cache"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+  name           = "${local.name_prefix}-rate-limit-cache"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = 1
+  write_capacity = 1
+  hash_key       = "PK"
+  range_key      = "SK"
 
   attribute {
     name = "PK"
@@ -129,10 +157,12 @@ resource "aws_dynamodb_table" "rate_limit_cache" {
 # 4. brute_force_counter — failed-auth counter for lockout (TTL)
 # ---------------------------------------------------------------------------
 resource "aws_dynamodb_table" "brute_force_counter" {
-  name         = "${local.name_prefix}-brute-force-counter"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+  name           = "${local.name_prefix}-brute-force-counter"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = 1
+  write_capacity = 1
+  hash_key       = "PK"
+  range_key      = "SK"
 
   attribute {
     name = "PK"
@@ -158,10 +188,12 @@ resource "aws_dynamodb_table" "brute_force_counter" {
 # 5. geocode_cache — postal-code → (lat, lon) cache (TTL, 30 days)
 # ---------------------------------------------------------------------------
 resource "aws_dynamodb_table" "geocode_cache" {
-  name         = "${local.name_prefix}-geocode-cache"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+  name           = "${local.name_prefix}-geocode-cache"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = 1
+  write_capacity = 1
+  hash_key       = "PK"
+  range_key      = "SK"
 
   attribute {
     name = "PK"

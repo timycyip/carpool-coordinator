@@ -1,7 +1,7 @@
 # ADR-0004: Same-Origin via Cloudflare Pages rewrites()
 
 ## Status
-Accepted
+Superseded by ADR-0016 for deployed Cloudflare Pages routing
 
 ## Date
 2026-06-23
@@ -73,3 +73,8 @@ Frontend calls the Lambda URL directly. Backend sets `Access-Control-Allow-Origi
 - ADR-0002 (JWT in-memory): `docs/adr/0002-app-session-jwt.md`
 - Phase 2 plan Task 2.11 (Frontend bootstrap): `plans/phase-2-foundation.md`
 - ARCHITECTURE.md §Architecture Principles: `ARCHITECTURE.md`
+
+## Supersession
+The original Next.js rewrite approach cannot be used with static export. The deployed frontend now
+uses a Cloudflare Pages Function limited to `/api/*` by `_routes.json`; see
+[ADR-0016](0016-static-pages-api-proxy.md). The local Next.js development rewrite remains.

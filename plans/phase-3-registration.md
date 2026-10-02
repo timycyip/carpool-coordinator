@@ -1,5 +1,7 @@
 # Phase 3 — Registration Plan
 
+**Status: Incomplete — not started; blocked on completion of Phase 2 foundation.**
+
 Builds on Phase 2 (working auth + session CRUD + RBAC). Goal: users can register as drivers/passengers into a session, with location lookup via OSM services.
 
 ---
@@ -30,7 +32,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 ---
 
 ## Open Questions (to refine)
-- [ ] ORS free-tier matrix limit (~50 locations/call) — what batching strategy for sessions with 200+ participants?
+- [ ] Confirm current ORS account limits and candidate-matrix batching with a controlled live integration check; dev/staging use fixtures by default.
 - [ ] Geocode cache TTL: permanent (postal code centroids rarely change) or 90-day refresh?
 - [ ] Postal code validation: which countries/regexes for MVP? Recommend restricting to one country per first-deployment region.
 - [ ] Accessibility requirements field: free text or controlled vocabulary (wheelchair, service animal, etc.)?
@@ -39,8 +41,10 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 Registration workflow with maps integration. Drivers and passengers can register into an open session, submit location (postal code → geocoded), and view their own registration. Admin can see all registrations for their session.
 
 ## Decisions (locked)
-- Geocoding: public Nominatim, rate-limited to 1 req/s, results cached as TTL items in `app_data` (key = postal code).
-- Routing/matrix: OpenRouteService (ORS) free-tier API (`/v2/directions`, `/v2/matrix`). Free tier: 2000 req/day, 40 req/min, ~50 locations per matrix call — batching required for large sessions.
+- Geocoding: Nominatim in production, rate-limited to 1 req/s globally for the application, results cached as TTL items. Dev/staging use deterministic fixtures by default.
+- Routing/matrix: hosted OpenRouteService (ORS) in production. Dev/staging use deterministic fixtures by default. Current published limits differ by endpoint (Standard plan: directions 2,000/day; matrix 500/day; 40/minute); verify against the application's actual ORS account plan before depending on them. Matrix requests have a 3,500 origin-destination-pair cap.
+- Proposed initial ORS limits: at most 400 matrix calls/day and 1,600 directions calls/day account-wide (80% of published Standard limits), 32 total calls/minute, 5 uncached matching runs per user/day, and one run per session per 10 minutes. Count actual provider calls, not cache hits; adjust after measuring calls per match and confirming the active ORS plan.
+- Per-user limits do not replace the provider-wide quota because all users share the same provider key. Return a retryable response when either budget is exhausted.
 - Registration APIs: `POST /sessions/{code}/register`, `GET /sessions/{code}/me`, `PATCH /sessions/{code}/me`.
 - Canonical registration schema (resolving FR-3 vs FR-4 duplication) from Phase 1 baseline.
 - Driver/passenger visibility per FR-9: users see only their own registration pre-match.
@@ -49,8 +53,8 @@ Registration workflow with maps integration. Drivers and passengers can register
 
 ### Backend
 1. **Registration API**: `POST /sessions/{code}/register` — accept role (driver/passenger) + canonical fields. Validate session is `Registration Open` and not past `registration_deadline`. Enforce one registration per user per session (role locked at registration).
-2. **Geocode service**: `app/services/geocode.py` — postal code → centroid lat/lon via Nominatim (1 req/s RateLimiter adapted from existing `src/main.py`). Check `app_data` TTL cache first; on miss, geocode + cache with TTL. Handle `CustomGeocodingError` → return 400 with actionable message.
-3. **Routing service**: `app/services/routing.py` — thin client over ORS `/v2/directions` and `/v2/matrix`. Used now for distance validation (detour feasibility pre-check); primary consumer is Phase 4 matching.
+2. **Geocode service**: `app/services/geocode.py` — use deterministic fixtures in dev/staging and tests. Production checks the shared geocode cache before a globally throttled Nominatim call, then caches the result. Handle unavailable providers with a retryable response.
+3. **Routing service**: `app/services/routing.py` — fixture provider in dev/staging and tests; opt-in live ORS checks only. Production client calls ORS `/v2/directions` and `/v2/matrix` through account-wide quota enforcement, caches results, and returns a retryable error when quota is exhausted.
 4. **Registration read/update**: `GET /sessions/{code}/me` (self), `PATCH /sessions/{code}/me` (self, only while `Registration Open`). Enforce FR-9 visibility.
 5. **Admin registration view**: `GET /sessions/{code}/registrations` (Session Admin/Manager/Superuser) — list all drivers/passengers with locations + time windows.
 6. **Registration field validation**: postal code format, time window sanity (earliest < latest, within session window), seat capacity > 0 for drivers.
@@ -66,7 +70,7 @@ Registration workflow with maps integration. Drivers and passengers can register
 
 ## Deliverables
 - Registration APIs live and validated.
-- ORS routing client integrated (directions + matrix) with free-tier throttling.
+- Geocoding/routing fixtures work in dev/staging and tests; controlled live integration checks are opt-in and obey per-user, per-session, and provider-wide quotas.
 - Geocode cache populated and respecting 1 req/s.
 - Driver + passenger registration forms in Next.js.
 - Admin registrations view with map.
@@ -84,7 +88,7 @@ Registration workflow with maps integration. Drivers and passengers can register
 ## Dependencies
 - Phase 2: auth, session lifecycle, RBAC middleware.
 - Phase 1: canonical registration schema, ERD, API contracts.
-- ORS API key provisioned (free tier: 2000 req/day, 40 req/min).
+- ORS API key stored in the production secret store; dev/staging live use is disabled by default. Confirm current per-endpoint account limits.
 
 ## Out of Scope
 - Matching engine (Phase 4).
@@ -125,13 +129,13 @@ Registration workflow with maps integration. Drivers and passengers can register
 
 ### Task 3.3: Routing service client [MVP]
 
-**Description:** Implement a thin client over the OpenRouteService (ORS) free-tier API — `/v2/directions/{profile}` for routes with geometry and `/v2/matrix` for distance+duration matrices. Used now for distance validation (detour feasibility pre-check during registration) and as the primary consumer by the Phase 4 matching engine.
+**Description:** Implement a routing provider interface with deterministic fixtures as the dev/staging/test default and an opt-in ORS adapter for controlled integration checks and production. `/v2/directions/{profile}` returns routes; `/v2/matrix` returns distance/duration matrices. Enforce the shared provider quota and cache results.
 
 **Acceptance criteria:**
 - [ ] `app/services/routing.py` provides `get_route(origin, destination)` and `get_matrix(locations)`
 - [ ] `get_route` calls ORS `/v2/directions/{profile}` and returns distance (m), duration (s), polyline geometry
 - [ ] `get_matrix` calls ORS `/v2/matrix` and returns structured distance + duration matrices
-- [ ] Handles ORS free-tier rate limits (40 req/min) with client-side throttling
+- [ ] Opt-in live ORS calls obey the configured account-wide daily/minute quota and per-user/per-session limits; fixture path requires no network
 - [ ] Batches matrix requests for >50 locations (chunked calls + merge)
 - [ ] Handles ORS errors gracefully with retries (exponential backoff)
 - [ ] Configurable ORS base URL + API key (env vars)
@@ -291,7 +295,7 @@ Registration workflow with maps integration. Drivers and passengers can register
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Nominatim 1 req/s rate limit blocks registration | High | Aggressive cache, 1 req/s RateLimiter; permanent TTL for postal code centroids |
-| ORS free-tier rate limit (40 req/min, 2000/day) too low for large-session matrix calls | Medium | Batch matrix requests; cache results per session; fall back to haversine distance for clustering pre-filter |
+| ORS provider quota too low for large-session matrix calls | High | Fixtures in dev/staging; verify account limits; candidate pre-filter, caching, provider-wide limiter, per-user/per-session matching limits, and retryable quota responses |
 | Duplicate registrations due to retry | Medium | Idempotency key on registration POST; unique constraint on (session, user) |
 | Map tiles blocked by CSP | Medium | Configure CSP allowlist for tile.openstreetmap.org in Cloudflare |
 | `LocationPicker` component drift between driver/passenger forms | Low | Single shared component with role-specific prop schema |

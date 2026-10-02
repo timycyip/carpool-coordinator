@@ -1,5 +1,21 @@
 # Phase 2 — Foundation Plan
 
+## Cost target and current implementation decision
+
+The deployment target is near-zero cost, including three environments. DynamoDB free provisioned
+capacity is pooled across the AWS account and region, not multiplied per environment. Follow
+[ADR-0015](../docs/adr/0015-cost-first-capacity-controls.md): start each table and GSI at 1 RCU/1
+WCU, do not auto-scale by default, and return safe retry/back-pressure responses above capacity.
+With 15 tables and six GSIs, this baseline consumes 21 of the 25 free units per read/write
+dimension, leaving four units for measured reallocation. Dev and staging PITR stay disabled;
+production must enable PITR after its approval gate. Configure `COST_ALERT_EMAIL` in the dev
+GitHub Environment to create the single account-wide $5 monthly AWS Budget with 80% actual and
+100% forecasted email alerts. Budgets notify but do not cap spend.
+
+Dev and staging use deterministic geocoding, routing, and email fixtures. Live-provider checks are
+explicit, controlled integration runs with both per-user limits and a provider-wide daily/minute
+budget; fixture traffic must not consume production provider quota.
+
 Builds on Phase 1 artifacts (`docs/requirements_baseline.md`, `docs/api_contracts.md`,
 `docs/data_model_erd.md`, `docs/rbac_matrix.md`). Goal: working Google login + session setup
 deployed to AWS, with the Next.js frontend bootstrapped on Cloudflare Pages.
@@ -16,7 +32,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 | **Week 1** | A3 | `KNOWLEDGE.md` not created at repo root. AGENTS.md §17 requires it after first task wrap-up. Capture: ADR-0001 multi-table rationale, ADR-0008 deferred-delivery reversal, canonical schema supremacy principle. | Task 2.1 |
 | **Week 1** | A5 | `docs/functional_requirements_and_architecture.md` (master spec) §10 lists 4 tables (now 5 per ADR-0001) and §13/§14 describe synchronous email (now deferred per ADR-0008). Add an amendment banner at the top of the spec listing superseding ADRs. | Task 2.1 |
 | **Phase 2** | A7 | `gsi_latest_match_by_session` in the ERD is architecturally redundant — the main-table Query on `SESSION#<code>` + `SK begins_with MATCH#` returns the same data at identical cost. During Task 2.2, evaluate: drop the GSI or document the cost-benefit rationale. | Task 2.2 |
-| **Phase 2** | A9 | NFR-SCALE-2 states "idle cost = $0" — literally false (CloudWatch Logs ingestion is never zero). Reword to "≤ $1/month idle" or define a measurement window in `docs/requirements_baseline.md` §5.3. | Task 2.10 |
+| **Phase 2** | A9 | **Superseded by ADR-0015 / NFR-SCALE-2 v3.1:** optimize for near-zero shared account cost using provisioned DynamoDB, fixtures, and safe back-pressure; no per-environment dollar ceiling is claimed. | Task 2.10 |
 
 > **Status as of 2026-06-23:** SPECIFY gate complete. All blocking open questions resolved
 > by human review. Phase 2 implementation is **gated on Phase 1 Discovery completing**
@@ -28,7 +44,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 | 1 | Phase 1 artifacts missing | **Complete Phase 1 first.** Phase 1 Discovery produces `docs/api_contracts.md`, `docs/data_model_erd.md`, `docs/rbac_matrix.md`, wireframes before any Phase 2 code. | Hard prerequisite; gates Task 2.2+ |
 | 2 | DynamoDB table strategy | **Tables named per data model** (NOT single-table consolidation). | ADR-0001 `docs/adr/0001-table-naming-by-data-model.md` |
 | 3 | App session mechanism | **JWT.** Backend issues a signed JWT after Google OIDC verification. Frontend stores in memory (not localStorage). | ADR-0002; human-confirmed 2026-06-23 |
-| 4 | IaC choice | **Terraform** (provisioned via GitHub Actions on merge to main). | ADR-0003; human-confirmed 2026-06-23 |
+| 4 | IaC choice | **Terraform** (GitHub-hosted runners using AWS OIDC federation; plan on PR, apply on main). | ADR-0003; human-confirmed 2026-06-23 |
 | 5 | AWS region | **`us-east-2`** (Ohio). | ADR-0003; human-confirmed 2026-06-23 |
 | 6 | Secrets store | **AWS Parameter Store** (per requirements doc §10). | Tasks 2.3, 2.10 |
 | 7 | Docs dir naming (`docs/` vs `doc/`) | **Open — to be settled in Phase 1.** AGENTS.md and this plan reference `doc/`; repo currently uses `docs/`. | Low risk; resolves with Phase 1 artifacts |
@@ -62,8 +78,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
    until Phase 4).
 3. Backend runs on **Python 3.12** (Lambda ARM64 target); all new Python code uses `uv`,
    `ruff`, `mypy --strict`, `pytest` — replacing the legacy `pylint`/`unittest`/Python 3.8 toolchain.
-4. The frontend is a **single** Next.js (App Router) app deployed to **Cloudflare Pages** via
-   `next-on-pages`; it talks to the backend over the Lambda Function URL.
+4. The frontend is a **single** static Next.js (App Router) export deployed to **Cloudflare Pages**; a Pages Function proxies only `/api/*` to the environment Lambda URL per ADR-0016.
 5. ~~There is exactly **one** DynamoDB table (`app_data`)~~ → **SUPERSEDED (2026-06-23):**
    Tables are **named per data model**, per ADR-0001. The single-table consolidation was
    rejected. Rate-limit/cache/brute-force tables remain separate (per requirements doc §10),
@@ -108,11 +123,11 @@ engine, email notifications, load testing, and production hardening (Phases 3–
 - AWS Lambda (ARM64, 256 MB, 5–10s timeout), DynamoDB (tables per data model — see ADR-0001)
 - `uv` (package manager), `ruff` (lint+format), `mypy --strict` (types), `pytest` (tests)
 - Google OIDC (identity) + app-issued **JWT** session (resolved 2026-06-23)
-- IaC: **Terraform** (provisioned via GitHub Actions) — region **`us-east-2`**
+- IaC: **Terraform** (GitHub-hosted runners using AWS OIDC federation) — region **`us-east-2`**
 
 **Frontend**
 - Node.js LTS, Next.js (App Router), TypeScript, Tailwind CSS
-- `@cloudflare/next-on-pages` adapter; Cloudflare Pages hosting (preview per branch)
+- Use the static Next.js export and API-only Pages Function proxy recorded in ADR-0016. Keep static asset traffic off the Function with `_routes.json`; configure Preview API origins and verify the real Pages build/deploy before relying on it.
 - `eslint`, `prettier`, `tsc --noEmit`, Vitest (unit), Playwright (e2e — TBD)
 
 **Infra / Edge**
@@ -147,7 +162,7 @@ npm install
 npm run dev                                # local Next.js
 npm run lint                               # eslint
 npx tsc --noEmit                           # type check
-npm run build                              # production build (next-on-pages)
+npm run build                              # production static export
 ```
 
 ### Project Structure
@@ -166,7 +181,7 @@ tests/                      → pytest tests, mirrored to app/ layout (auth/, ap
 frontend/                   → Next.js app (App Router, TS, Tailwind)
   src/app/                  → routes (login, register, sessions, dashboard)
   src/lib/                  → api-client, auth-context
-  wrangler.toml             → Cloudflare Pages / next-on-pages config
+  wrangler.toml             → Cloudflare Pages static output config
 src/                        → Legacy CLI (untouched in Phase 2; matching logic adapted in Phase 4)
 test/                       → Legacy unittest tests (untouched)
 mock/                       → Legacy CSV fixtures
@@ -253,14 +268,14 @@ models for all request/response bodies; `async` route handlers; ruff `format` (l
   - Any **DynamoDB schema change** (table/GSI/TTL) — table boundaries are decided by the Phase 1
     ERD; deviations need an ADR. *(See ADR-0001: tables are named per data model; single-table
     consolidation was rejected.)*
-  - **AWS region** changes (currently locked to `us-east-2`) — affects OSRM geography later.
+  - **AWS region** changes (currently locked to `us-east-2`) — affects latency and billing region.
   - Changing the **secrets store** choice (currently AWS Parameter Store).
   - Changing CI config, adding dependencies, or modifying the Google OAuth client configuration.
   - Any architectural decision needing an ADR (e.g., further deviation from requirements doc
     Section 10's table list beyond what Phase 1 ERD finalizes).
 - **Never do:**
-  - Commit secrets (Google OAuth client secret, AWS keys, OSRM endpoints) — use Parameter Store / env.
-  - Edit vendor/node_modules or generated `next-on-pages` output.
+  - Commit secrets (Google OAuth client secret, AWS keys, ORS credentials) — use Parameter Store / environment.
+  - Edit vendor/node_modules or generated build output.
   - Remove a failing test to make CI green without approval.
   - Implement features outside the Phase 2 scope (registration forms, maps, matching, email).
   - Skip the spec — update this spec first if scope/decisions change.
@@ -328,8 +343,8 @@ Deployable FastAPI skeleton on Lambda ARM64 with Google OIDC auth, session-code 
 
 **Deployment topology (us-east-2):**
 ```
-Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
-                       │  next.config rewrites() proxies /api/* (same-origin, no CORS)
+Browser ──HTTPS──► Cloudflare Pages (static assets)
+                       │  Pages Function proxies /api/* only (same-origin, no CORS)
                        ▼
                  Lambda ARM64 (FastAPI + Mangum)
                        │  middleware: rate_limit → audit → auth → rbac
@@ -340,7 +355,7 @@ Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
 ```
 
 **Architectural constraints for implementation:**
-- **Same-origin via Pages `rewrites()`** (ADR-004, recommended) — wire `/api/*` → Lambda URL before
+- **Same-origin via Pages Function** (ADR-0016) — wire `/api/*` → Lambda URL before
   auth (Task 2.11 / 2.3). Avoids CORS preflight; hides the Lambda URL.
 - **JWT stored in memory** in the browser (ADR-002, LOCKED) — not `localStorage` (XSS resistance).
   Authorization: Bearer header on every `/api/*` call.
@@ -358,10 +373,12 @@ Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
 | ADR-0001 | Tables named per data model (reject single-table) | **LOCKED** | `docs/adr/0001-table-naming-by-data-model.md` |
 | ADR-0002 | App session = JWT (in-memory browser storage) | Accepted | `docs/adr/0002-app-session-jwt.md` |
 | ADR-0003 | IaC = Terraform; region = us-east-2 | Accepted | `docs/adr/0003-terraform-iac-us-east-2.md` |
-| ADR-0004 | Same-origin via CF Pages `rewrites()` | Accepted | `docs/adr/0004-same-origin-rewrites.md` |
+| ADR-0004 | Same-origin via CF Pages rewrites | Superseded by ADR-0016 | `docs/adr/0004-same-origin-rewrites.md` |
+| ADR-0016 | Static Pages frontend + API proxy Function | Accepted | `docs/adr/0016-static-pages-api-proxy.md` |
 | ADR-0005 | Middleware order `rate_limit→audit→auth→rbac` | Accepted | `docs/adr/0005-middleware-ordering.md` |
 | ADR-0006 | Google JWKS cached in Lambda | Accepted | `docs/adr/0006-jwks-caching.md` |
-| ADR-0007 | DynamoDB on-demand capacity | Accepted | `docs/adr/0007-dynamodb-on-demand.md` |
+| ADR-0007 | DynamoDB on-demand capacity | Superseded by ADR-0015 | `docs/adr/0007-dynamodb-on-demand.md` |
+| ADR-0015 | Cost-first provisioned capacity and backup policy | Accepted | `docs/adr/0015-cost-first-capacity-controls.md` |
 | ADR-0008 | Deferred notification delivery (SQS→Lambda) | Accepted | `docs/adr/0008-deferred-notification-delivery.md` |
 | ADR-0009 | Contract-first API design with shared error envelope | Accepted | `docs/adr/0009-contract-first-error-envelope.md` |
 | ADR-0010 | 401 unauthorized subscriber pattern (api-client→auth-context) | Accepted | `docs/adr/0010-unauthorized-subscriber-pattern.md` |
@@ -384,7 +401,7 @@ Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
 - Google OIDC for identity; **app session = JWT** (resolved 2026-06-23); session code = registration invite only.
 - Multi-session per user: one global identity, many registrations.
 - Rate limits: 60 req/min per IP, 120 req/min per user (Section 14).
-- Next.js (App Router) on Cloudflare Pages via `next-on-pages`.
+- Static Next.js (App Router) export on Cloudflare Pages, with a Pages Function proxy for `/api/*`.
 - IaC: **Terraform** via GitHub Actions; region **`us-east-2`** (resolved 2026-06-23).
 - Secrets: **AWS Parameter Store** (resolved 2026-06-23).
 - **Phase 1 is a hard prerequisite** — no Phase 2 implementation (Task 2.1+) until Phase 1
@@ -405,7 +422,7 @@ Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
 10. **Audit logging**: `app/middleware/audit.py` — record logins, auth failures, session changes, admin overrides to `AUDIT#DATE`.
 
 ### Frontend (Next.js on Cloudflare Pages)
-1. **Bootstrap**: `npx create-next-app@latest` (App Router, TypeScript, Tailwind). Configure `next-on-pages`. Cloudflare Pages project with preview deploys per branch.
+1. **Bootstrap**: `npx create-next-app@latest` (App Router, TypeScript, Tailwind). Configure static export (`output: export`) plus the `/api/*` Pages Function. Cloudflare Pages project with dev/staging branch deployments.
 2. **API client**: typed fetch wrapper targeting the Lambda Function URL; auth cookie/JWT passthrough.
 3. **Login screen**: Google Identity Services button → `POST /auth/google` → store session.
 4. **Session-code entry**: `/register?session=ABC123` deep link + manual entry form → validates against backend.
@@ -535,7 +552,7 @@ Browser ──HTTPS──► Cloudflare (Pages + edge/WAF)
 | **A3** — Create `KNOWLEDGE.md` at repo root | Capture: ADR-0001 multi-table rationale, ADR-0008 deferred-delivery reversal, canonical schema supremacy principle, Phase 1 lessons learned. | Task 2.1 (housekeeping) |
 | **A5** — Add amendment banner to master spec | Add a banner at the top of `docs/functional_requirements_and_architecture.md` listing superseding ADRs (0001, 0008). | Task 2.1 (housekeeping) |
 | **A7** — Evaluate `gsi_latest_match_by_session` redundancy | During repository implementation, assess whether the main-table `Query` on `SESSION#<code>` + `SK begins_with MATCH#` with `ScanIndexForward=false, Limit=1` is sufficient to replace the GSI. Document rationale in a code comment on the Match repository. | Task 2.2 |
-| **A9** — Fix NFR-SCALE-2 wording | Change "idle cost = $0" to "≤ $1/month idle" in `docs/requirements_baseline.md` §5.3. The master spec v3.0 already has the correction; baseline needs sync. | Task 2.10 |
+| **A9** — Cost target | Superseded by the shared near-zero-cost requirement in NFR-SCALE-2 v3.1 and ADR-0015. Do not restore the old per-environment idle-cost wording. | Task 2.10 |
 
 ---
 
@@ -594,12 +611,12 @@ A1, A3, A5 (housekeeping edits to existing docs).
 #### Task 2.11: Next.js frontend bootstrap [M]
 
 **Description:** Bootstrap the Next.js app with App Router, TypeScript, Tailwind, and
-`@cloudflare/next-on-pages` adapter. Set up the typed API client, auth context provider, and
+static Pages export and the `/api/*` proxy Function. Set up the typed API client, auth context provider, and
 role-based routing scaffold. This is the frontend foundation that all UI tasks build on.
 
 **Acceptance criteria:**
 - [x] `npx create-next-app@latest frontend --typescript --tailwind --app --src-dir` creates the project
-- [x] `@cloudflare/next-on-pages` installed and configured (`next.config.ts` with `setupDevPlatform()`)
+- [ ] Production build emits a static `out/` directory; local `next dev` retains its localhost API rewrite
 - [x] `wrangler.toml` created with `compatibility_date`, `name = "carpool-coordinator"`, and a `pages_build_output_dir` pointing to `.vercel/output/static`
 - [x] `frontend/src/lib/api-client.ts` exports a typed `apiClient` with `get<T>`, `post<T>`, `patch<T>`, `del` methods that inject `Authorization: Bearer ${token}` from the auth context
 - [x] `frontend/src/lib/auth-context.tsx` exports `AuthProvider` (React Context) wrapping the app; stores JWT in-memory (never `localStorage` — ADR-0002); exposes `{ user, token, isAuthenticated, login, logout }`
@@ -632,7 +649,7 @@ role-based routing scaffold. This is the frontend foundation that all UI tasks b
 
 **Estimated scope:** M (entire scaffold — 10+ generated files, 5 hand-written modules)
 
-**ADR references:** ADR-0002 (JWT in-memory storage), ADR-0004 (same-origin via rewrites — implemented in Task 2.10 CI)
+**ADR references:** ADR-0002 (JWT in-memory storage), ADR-0016 (static export + same-origin Pages Function API proxy)
 
 ---
 
@@ -643,10 +660,10 @@ and implement the repository layer with the PK/SK patterns, GSIs, and TTL attrib
 Tables are **named per data model** (ADR-0001). Also resolves advisory A7.
 
 **Acceptance criteria:**
-- [ ] Terraform `infra/main.tf` provisions all 5 tables: `app_data`, `session_cache`, `rate_limit_cache`, `brute_force_counter`, `geocode_cache` — with `billing_mode = "PAY_PER_REQUEST"` (ADR-0007) and `server_side_encryption { enabled = true }` (AWS-owned KMS key, $0 cost — NFR-SEC-4)
+- [ ] Terraform `infra/main.tf` provisions all 5 tables at 1 RCU/1 WCU, and each `app_data` GSI at 1 RCU/1 WCU (ADR-0015), with AWS-owned DynamoDB encryption enabled (NFR-SEC-4)
 - [ ] `app_data` GSIs: `gsi_sessions_by_user` (PK=`USER#<sub>`, SK=`SESSION#<code>`), `gsi_admins_by_user` (PK=`USER#<sub>`, SK=`SESSION#<code>`)
 - [ ] TTL attributes: `ttl` on `rate_limit_cache`, `brute_force_counter`, `geocode_cache`; `session_cache` TTL TBD
-- [ ] PITR enabled on `app_data` only (not on ephemeral cache/counter tables)
+- [ ] PITR disabled for dev/staging; production configuration must enable PITR before production deploy is authorized
 - [ ] `app/repositories/base.py` exports `DynamoRepository` base class with `_table`, `_client` (boto3), typed `put_item`/`get_item`/`query`/`update_item`/`delete_item`
 - [ ] `app/repositories/user.py` — `UserRepository`: `get_by_sub(sub)`, `upsert(sub, email, name)`, `update_roles(sub, roles)`
 - [ ] `app/repositories/session.py` — `SessionRepository`: `create(code, attrs)`, `get_by_code(code)`, `update(code, attrs)`, `delete(code)`, `list_by_user(sub)` via GSI
@@ -662,7 +679,7 @@ Tables are **named per data model** (ADR-0001). Also resolves advisory A7.
 - [ ] `cd infra && terraform apply -auto-approve` (dev account) — creates tables
 - [ ] `cd infra && terraform plan` (second run) — shows no changes (idempotent)
 - [ ] Manual: `aws dynamodb put-item --table-name app_data --item '{"PK":{"S":"USER#test123"},"SK":{"S":"METADATA"}}'` succeeds
-- [ ] NFR-SEC-4 verified: `cd infra && terraform plan` output shows `server_side_encryption` block on all 5 DynamoDB tables (AWS-owned KMS key, $0 cost)
+- [ ] NFR-SEC-4 verified: `cd infra && terraform plan` output shows server-side encryption on all 5 DynamoDB tables (AWS-owned key)
 
 **Dependencies:** Task 2.1 (needs `app/` layout), Phase 1 ERD (`docs/data_model_erd.md` — complete)
 
@@ -688,7 +705,7 @@ Tables are **named per data model** (ADR-0001). Also resolves advisory A7.
 
 **Estimated scope:** M (6 repository modules, 1 Terraform file, 5+ test files)
 
-**ADR references:** ADR-0001 (multi-table), ADR-0007 (on-demand billing), NFR-SEC-4 (encryption at rest — AWS-owned KMS key, $0 cost), ERD §1–§5 (PK/SK/GSI/TTL design)
+**ADR references:** ADR-0001 (multi-table), ADR-0015 (provisioned capacity and PITR policy), NFR-SEC-4 (encryption at rest — AWS-owned key), ERD §1–§5 (PK/SK/GSI/TTL design)
 
 ---
 
@@ -1016,7 +1033,6 @@ session summary before registration."
   - On success: shows session summary with title, description, times, and a placeholder "Register as Driver / Passenger" section (full registration form deferred to Phase 3)
   - On error: shows appropriate message ("Session not found", "Registration closed", etc.)
 - [ ] Manager/Superuser bypass: `GET /sessions/{code}` already works for these roles (no code-gating)
-
 **Verification:**
 - [ ] `uv run pytest tests/api/test_session_code.py -v` — valid code (200), unknown (404), closed session (409), past deadline (409)
 - [ ] `uv run pytest tests/api/test_registration.py -v` — if endpoint extends to `GET /sessions/{code}/eligibility`
@@ -1058,8 +1074,9 @@ Pages with preview per branch). Also resolves advisory A9.
 - [ ] GitHub Actions secrets configured: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `GOOGLE_CLIENT_ID`
 - [ ] JWT signing secret (`JWT_SECRET`) provisioned into AWS Parameter Store by Terraform (`infra/lambda.tf`), NOT stored as a GitHub Actions secret — the Lambda reads it at cold-start (per ADR-0002). GitHub Actions OIDC role grants Lambda the `ssm:GetParameter` permission.
 - [ ] `README.md` updated with CI status badges for all 3 workflows
-- [ ] **A9 resolved:** `docs/requirements_baseline.md` §5.3 NFR-SCALE-2 wording changed to "≤ $1/month idle"
-- [ ] NFR-SEC-4: S3 buckets (Terraform state backend, CloudWatch log archive, Lambda deployment artifact) have SSE-KMS configured via `aws_s3_bucket_server_side_encryption_configuration` with `sse_algorithm = "aws:kms"` (AWS-managed `aws/s3` key, $0 monthly key cost)
+- [ ] **A9 superseded by ADR-0015:** `docs/requirements_baseline.md` and master spec record the near-zero cost target and shared free-capacity/back-pressure model.
+- [ ] Provision one $5/month account-wide AWS Budget from dev Terraform only; alert at 80% actual and 100% forecast; configure the dev-only `COST_ALERT_EMAIL` secret. Budget notifications do not cap spend.
+- [ ] NFR-SEC-4: S3 buckets use SSE-KMS with the AWS-managed `aws/s3` key (no customer-managed key storage fee; KMS request charges may still apply)
 
 **Verification:**
 - [ ] Push to a feature branch → all CI jobs run green
@@ -1121,9 +1138,9 @@ Pages with preview per branch). Also resolves advisory A9.
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
 | OAuth client misconfig blocks all auth | **High** | Medium | Test with Google Identity Services dev keys first; `app/auth/oidc.py` logs JWKS fetch errors clearly; document client ID/secret rotation in `KNOWLEDGE.md` |
-| DynamoDB table provisioning takes longer than expected (GSI backfill, PITR enable) | Medium | Low | Terraform handles creation; on-demand billing means no capacity tuning; GSI creation is async but fast for empty tables |
+| Provisioned free capacity is too low during a traffic burst | High | Medium | Surface throttling; safely retry writes; load test aggregate table/index allocation; consider SQS only after async registration behavior is approved |
 | IaC drift between local moto mocks and real DynamoDB | Medium | Medium | All repository tests run against moto (exact API surface); integration tests against docker `dynamodb-local` in CI (Task 2.10); Terraform is single source of truth |
-| `next-on-pages` incompatibility with a Next.js feature used in scaffold | Medium | Low | Stick to supported patterns (no `middleware.ts`, no ISR at edge); validate with `npx @cloudflare/next-on-pages` before merging |
+| Cloudflare Pages API Function quota exhaustion | Medium | Keep static routes out of Functions with `_routes.json`; monitor API call volume against the shared Workers Free daily quota |
 | Lambda cold start on first deploy | Low | Low | Provisioned concurrency off for dev; cold starts are < 1500ms per NFR-PERF-3; tune in Phase 6 |
 | `gsi_latest_match_by_session` adds unnecessary write cost | Low | Low | Evaluated in Task 2.2 (advisory A7); likely dropped — main-table Query suffices per ERD §3.3 analysis |
 
@@ -1131,18 +1148,39 @@ Pages with preview per branch). Also resolves advisory A9.
 
 ## Task Completion Tracker
 
-*Last updated: 2026-06-25*
+*Last updated: 2026-10-01*
 
 | Task | Status | Scope | Deps | Verification |
 |------|--------|-------|------|-------------|
 | 2.1 | ✅ Done | S | — | pytest, ruff, mypy, uvicorn smoke — PR #3 |
-| 2.11 | ✅ Done | M | — | npm build, lint, tsc — PR #4 |
+| 2.11 | ⚠️ Static export + Pages Function path implemented locally / cloud deploy unverified | M | — | Build/deploy not run against Cloudflare; configure Preview runtime API origins and verify `/api/*` proxy routing |
 | 2.2 | ✅ Done | M | 2.1 | pytest repos (29 tests), terraform plan — PR #6 |
 | 2.3 | ✅ Done | M | 2.2 | pytest auth (9 tests), JWT+JWKS — merged |
 | 2.4 | ✅ Done | S | 2.3 | pytest rbac (22 tests: 16 e2e + 6 unit) — merged |
-| 2.5 | ⬜ Pending | M | 2.4 | pytest sessions, manual CRUD |
-| 2.7 | ⬜ Pending | S | 2.4, 2.5 | pytest admin, manual assign |
-| 2.6 | ⬜ Pending | S | 2.5 | pytest code validation, manual deep link |
+| 2.5 | ⚠️ Partial / Blocked | M | 2.4 | CRUD code is local; create/update of anchor returns 503 until Phase 3 geocoder is wired; tests/manual CRUD not run |
+| 2.7 | ⚠️ Implemented locally / Blocked on 2.5 | S | 2.4, 2.5 | Assignment API/models and router are present; end-to-end use awaits session creation; tests/manual assignment not run; not deployed |
+| 2.6 | ⚠️ Implemented locally / Unverified | S | 2.5 | Session-code page supports manual lookup/deep link; tests/manual browser flow not run; not deployed |
 | 2.8 | ✅ Done | S | 2.2 | pytest rate limit (12 tests) — merged |
 | 2.9 | ✅ Done | S | 2.2 | pytest audit (11 tests) — merged |
-| 2.10 | ✅ Done | M | 2.1, 2.3, 2.11 | 3 CI workflows + README badges — merged |
+| 2.10 | ⚠️ Partial / Deployment blocked | M | 2.1, 2.3, 2.11 | Dev/staging workflows and Lambda Terraform are local; no run/deployment evidence; Pages adapter, AWS/Cloudflare config, first-artifact and SSM wiring remain |
+
+**Blockers and input needed:**
+- Task 2.5 depends on real anchor geocoding, currently planned for Phase 3 Task 3.1. The current phase order leaves session creation returning `503`. Current direction is to keep geocoding in Phase 3; moving it into Phase 2 would need an explicit scope decision.
+- Task 2.10 has feature-branch → dev and master → staging workflow changes in the local checkout, but they are not pushed to GitHub's default branch. The checkout is detached; GitHub has no successful deployment evidence. The `dev` and `staging` environments exist, but their required variables/secrets are not configured. AWS auth must use environment-scoped `AWS_DEPLOY_ROLE_ARN` with OIDC; never add AWS access keys to the repository.
+- The adapter incompatibility is addressed by replacing `next-on-pages` with static export and a Pages Function proxy (ADR-0016). Deployment remains unverified until the Cloudflare Pages Preview API-origin variables are configured and a Pages build/deploy succeeds.
+- Terraform now declares the Lambda backend and artifact bucket. The first apply still requires the Terraform state bucket/lock table and an initial `lambda.zip` in the artifact bucket; the workflow does not bootstrap these dependencies. The Lambda Function URL is public, so production security/edge restrictions require a separate review and are not authorized here.
+- The backend now resolves the active app-data and rate-limit table names from Lambda environment variables, preserving local defaults. `GOOGLE_CLIENT_ID` and `JWT_SECRET` remain Lambda environment requirements; app code/deploy workflow do not yet retrieve them from SSM. Keep the values in SSM and complete a secure runtime/deploy integration before relying on them.
+- This plan still contains an unrelated unresolved merge conflict at the Phase D checkpoint. The tracker was updated outside that conflict; the conflicting checkpoint text needs human reconciliation before further edits in that section.
+
+### Deployment Blockers (2026-10-01)
+
+See [Dev Deployment Setup](../docs/dev-deployment-setup.md) and
+[ADR-0014](../docs/adr/0014-environment-promotion-and-oidc.md) for the
+non-production promotion policy, credential locations, and bootstrap steps.
+
+- GitHub's default branch is `master`, but the Phase 2 CI/deployment workflows are not present on the remote default branch. The current local checkout is detached, and its workflow changes must be published on a branch before GitHub can run them.
+- CI deployment configuration is incomplete: `dev` and `staging` GitHub Environments exist, but their environment-scoped variables/secrets for AWS OIDC role assumption and Cloudflare Pages are unset. Never store static AWS access keys or commit credential values.
+- Frontend hosting is Cloudflare Pages. The API remains FastAPI on AWS Lambda per the architecture; Terraform now defines its execution role/function and deployment artifact bucket. Initial artifact upload and runtime-secret integration remain blockers.
+- Terraform's S3 state bucket and DynamoDB lock table are prerequisites, but the workflow currently does not bootstrap them. Provision them once before running remote-state `terraform init`.
+- Deployment policy: feature branches deploy only to `dev`; `master` is staging-ready and deploys to `staging`; production promotion must follow a successful staging deployment and explicit approval. Do not deploy production as part of this work.
+- The frontend adapter incompatibility is addressed in local config with static export and an API-only Pages Function. Cloudflare deployment and Preview runtime-origin configuration remain unverified; no production deployment is authorized.

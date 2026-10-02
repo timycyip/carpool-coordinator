@@ -36,3 +36,24 @@ class SessionRepository(DynamoRepository):
 
     async def delete(self, code: str) -> None:
         await self.delete_item({"PK": f"SESSION#{code}", "SK": "METADATA"})
+
+    async def delete_session_records(self, code: str) -> None:
+        """Delete every item in a session partition, including all query pages."""
+        last_key: dict[str, Any] | None = None
+        while True:
+            kwargs: dict[str, Any] = {
+                "TableName": self.table_name,
+                "KeyConditionExpression": "PK = :pk",
+                "ExpressionAttributeValues": {
+                    ":pk": self._serializer.serialize(f"SESSION#{code}")
+                },
+            }
+            if last_key is not None:
+                kwargs["ExclusiveStartKey"] = last_key
+            response = self.client.query(**kwargs)
+            for raw_item in response.get("Items", []):
+                item = self._from_dynamo(raw_item)
+                await self.delete_item({"PK": item["PK"], "SK": item["SK"]})
+            last_key = response.get("LastEvaluatedKey")
+            if last_key is None:
+                return

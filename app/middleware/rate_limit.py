@@ -39,6 +39,7 @@ from botocore.exceptions import ClientError
 from fastapi import Depends, HTTPException, Request, status
 
 from app.auth.jwt import InvalidAppTokenError, decode_app_token
+from app.config import get_table_name
 from app.db import get_ddb_client
 from app.models.error import ErrorBody, ErrorResponse
 
@@ -46,7 +47,6 @@ if TYPE_CHECKING:
     from mypy_boto3_dynamodb import DynamoDBClient
 
 
-_RATELIMIT_TABLE = "rate_limit_cache"
 _DEFAULT_IP_LIMIT = 60
 _DEFAULT_USER_LIMIT = 120
 _DEFAULT_WINDOW = 60
@@ -116,14 +116,16 @@ class RateLimiter:
     def __init__(
         self,
         client: DynamoDBClient,
-        table_name: str = _RATELIMIT_TABLE,
+        table_name: str | None = None,
         ip_limit: int | None = None,
         user_limit: int | None = None,
         ip_window: int | None = None,
         user_window: int | None = None,
     ) -> None:
         self._client = client
-        self._table = table_name
+        self._table = table_name or get_table_name(
+            "RATE_LIMIT_CACHE_TABLE_NAME", "rate_limit_cache"
+        )
         self._ip_limit = (
             ip_limit
             if ip_limit is not None

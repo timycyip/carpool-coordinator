@@ -18,9 +18,10 @@ The repository is mid-transformation:
 - **Legacy** (`src/main.py`): a Python CLI script that reads a CSV of drivers/riders, geocodes
   addresses with Nominatim, builds a scipy distance matrix, and writes matched carpools to a
   CSV. Dependencies: `pandas`, `geopy`, `scipy`. Tests in `test/` are `unittest`-based stubs.
-- **Target** (per `docs/functional_requirements_and_architecture.md` v2): a full-stack web app —
-  FastAPI + Mangum on AWS Lambda ARM64, Next.js (App Router) on Cloudflare Pages, DynamoDB
-  single-table, Google OIDC, Nominatim (geocode) + self-hosted OSRM (matrix/route), and a
+- **Target** (per `docs/functional_requirements_and_architecture.md` v3): a full-stack web app —
+  FastAPI + Mangum on AWS Lambda ARM64, Next.js (App Router) on Cloudflare Pages, five DynamoDB
+  tables, Google OIDC, public Nominatim (cached geocoding) + hosted OpenRouteService (ORS) for
+  routing and matrices, and a
   greedy matching MVP that reuses the legacy `src/main.py` logic relocated into
   `app/services/matching.py`.
 
@@ -33,8 +34,8 @@ The build-out is phased: **Phase 1 Discovery → Phase 6 Hardening** (see `plans
 | Area | State |
 | --- | --- |
 | Legacy CLI | Present in `src/main.py`; superseded by the platform build but retained as the matching-algorithm reference. |
-| Phase 1 — Discovery | **Active.** Producing design artifacts (requirements baseline, RBAC matrix, workflow diagrams, ERD, API contracts, wireframes) in `docs/`. No production code ships this phase. |
-| Phase 2 — Foundation | Planned. FastAPI skeleton, Google OIDC, session CRUD, RBAC middleware, rate limiting, DynamoDB schema, Next.js bootstrap. |
+| Phase 1 — Discovery | Complete. Design artifacts and decisions are recorded in `docs/`; see `plans/phase-1-discovery.md`. |
+| Phase 2 — Foundation | Active. FastAPI, Google OIDC, session/RBAC APIs, DynamoDB, Next.js, and non-production CI/deploy work are in progress; see the plan tracker. |
 | Phase 3 — Registration | Planned. Registration workflow, maps integration, driver/passenger UI. |
 | Phase 4 — Matching Engine | Planned. Route matrix, scoring, optimization (CVRPTW), admin override. Most complex phase. |
 | Phase 5 — Approval & Notification | Planned. Approval workflow, email via SQS → email Lambda → M365 Exchange, audit logging. |
@@ -56,13 +57,13 @@ The build-out is phased: **Phase 1 Discovery → Phase 6 Hardening** (see `plans
 
 **Frontend (Phase 2+):**
 - Node.js LTS + **Next.js** (App Router), TypeScript, Tailwind CSS.
-- Deployed via `next-on-pages` to Cloudflare Pages.
+- Deployed as a static export to Cloudflare Pages; a Pages Function proxies only `/api/*`.
 - Tooling: `eslint`, `prettier`, `tsc --noEmit`, Vitest/Playwright (TBD in Phase 2).
 
 **Infrastructure:**
-- AWS Lambda ARM64, DynamoDB, S3, CloudWatch, Parameter Store, (SQS / Step Functions for large sessions).
+- AWS Lambda ARM64, provisioned DynamoDB, S3, CloudWatch, Parameter Store, (SQS / Step Functions for large sessions).
 - Cloudflare (Pages + Free tier edge/WAF).
-- Self-hosted OSRM for routing; public Nominatim (cached) for geocoding.
+- Hosted ORS for routing and matrices; public Nominatim (cached) for geocoding. Dev/staging use deterministic fixtures by default; live provider checks are controlled and quota-limited.
 
 ---
 
@@ -101,7 +102,7 @@ npm install
 npm run dev                               # local Next.js
 npm run lint                              # eslint
 npx tsc --noEmit                          # type check
-npm run build                             # production build (next-on-pages)
+npm run build                             # static production export
 npm test                                  # unit/integration (TBD)
 ```
 
@@ -134,7 +135,7 @@ npm test                                  # unit/integration (TBD)
 7. **Legacy code is a reference, not the standard.** `src/main.py` matching logic is reused by
    adaptation, not copy-paste. New code follows the target toolchain (ruff/mypy/pytest) and the
    `app/` layout (§11 of the requirements doc).
-8. **Never commit secrets.** Google OAuth client secrets, AWS keys, OSRM endpoints go in AWS
+8. **Never commit secrets.** Google OAuth client secrets, AWS keys, and ORS credentials go in AWS
    Parameter Store / environment — never in the repo.
 
 ---
@@ -470,8 +471,8 @@ not hardcoded):
 
 | Setting | Default / Spec | Notes |
 | --- | --- | --- |
-| Geocoding provider | Nominatim (public, cached) | FR-5; self-host if rate-limited. |
-| Routing provider | OSRM (self-hosted) | FR-5; provides `/route`, `/matrix`. |
+| Geocoding provider | Nominatim (public, cached) | FR-5; dev/staging fixtures by default and production-wide 1 req/s limit. |
+| Routing provider | OpenRouteService (hosted) | FR-5; `/v2/directions` and `/v2/matrix`; cache results and enforce shared provider quotas. |
 | Matching algorithm | Greedy heuristic (MVP) | FR-6; OR-Tools/LP for production (>300 users). |
 | Matching problem | CVRPTW | Capacitated Vehicle Routing Problem with Time Windows. |
 | Rate limit (per IP) | 60 req/min | §14 of requirements doc. |
@@ -483,7 +484,7 @@ not hardcoded):
 | Notifications | Email via SQS → email Lambda → M365 Exchange | FR-10. |
 | Log retention | CloudWatch → S3 (30-day lifecycle) → Athena | §10. |
 | Edge / CDN | Cloudflare Free | §9 architecture. |
-| AWS region | TBD (Phase 2 open question) | Affects OSRM extract geography. |
+| AWS region | `us-east-2` | See ADR-0003. |
 
 ---
 

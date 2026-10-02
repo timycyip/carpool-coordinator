@@ -25,14 +25,16 @@ The platform uses **five** DynamoDB tables, each named to reflect its data-model
 
 | Table                | Purpose                                                                  | Billing      |
 | -------------------- | ------------------------------------------------------------------------ | ------------ |
-| `app_data`           | All business entities (users, sessions, registrations, matches, admins, audit) | On-demand (ADR-0007) |
-| `session_cache`      | Session-scoped ephemeral state cache (TTL)                               | On-demand    |
-| `rate_limit_cache`   | Per-IP / per-user request counters (TTL, short window)                   | On-demand    |
-| `brute_force_counter`| Failed-auth counter for lockout / exponential backoff (TTL)              | On-demand    |
-| `geocode_cache`      | Postal-code → (lat, lon) cache (TTL, 30 days)                            | On-demand    |
+| `app_data`           | All business entities (users, sessions, registrations, matches, admins, audit) | Provisioned (ADR-0015) |
+| `session_cache`      | Session-scoped ephemeral state cache (TTL)                               | Provisioned  |
+| `rate_limit_cache`   | Per-IP / per-user request counters (TTL, short window)                   | Provisioned  |
+| `brute_force_counter`| Failed-auth counter for lockout / exponential backoff (TTL)              | Provisioned  |
+| `geocode_cache`      | Postal-code → (lat, lon) cache (TTL, 30 days)                            | Provisioned  |
 
-**On-demand capacity** for all tables per [ADR-0007](adr/0007-dynamodb-on-demand.md) (zero
-idle cost, instant scaling, no per-table capacity tuning needed for multi-table design).
+**Provisioned capacity** for all tables and GSIs per [ADR-0015](adr/0015-cost-first-capacity-controls.md),
+initially 1 RCU/1 WCU each. The free capacity pool is shared by the AWS account and region; excess
+traffic can throttle and must receive safe back-pressure. [ADR-0007](adr/0007-dynamodb-on-demand.md)
+records the superseded on-demand choice.
 
 **Why tables are split (not consolidated):** see [ADR-0001](adr/0001-table-naming-by-data-model.md).
 In short — heterogeneous access profiles (hot rate-limit writes vs. cold audit writes),
@@ -380,7 +382,8 @@ read path is idempotent (re-derive / re-increment on miss).
 
 - [ADR-0001](adr/0001-table-naming-by-data-model.md) — Tables named per data model (this
   ERD's table split is derived from this ADR).
-- [ADR-0007](adr/0007-dynamodb-on-demand.md) — On-demand billing for all tables.
+- [ADR-0015](adr/0015-cost-first-capacity-controls.md) — Provisioned capacity and cost-first controls.
+- [ADR-0007](adr/0007-dynamodb-on-demand.md) — Superseded on-demand decision.
 - Spec §8 — Data Model (PK/SK primitives; this ERD refines the spec into implementable
   patterns).
 - Spec §7 — Session Geometry Model (`anchor_location` attribute on Session).
@@ -505,7 +508,7 @@ erDiagram
 | --- | --- | --- |
 | **Session cache contents** — what specifically goes in `session_cache`? Candidates: hot "current approved match per session" pointer, or short-lived registration-in-progress state. | **Deferred to Phase 3.** Not needed by any Phase 2 code path. Added to Phase 3 task list. | Phase 3 |
 | **Geocode cache key normalization** — Phase 3 must lock the normalization (uppercase, strip whitespace, handle Canadian postal codes `A1A 1A1`, US ZIP+4). | Carried forward to Phase 3. Already called out in `plans/phase-3-registration.md`. | Phase 3 |
-| **Audit-log retention** — spec implies 30-day S3 archive, but no clear policy on active-DynamoDB retention. Original proposal was 90 days; revised per human decision. | **30 days hot in DynamoDB** (matches S3 lifecycle + idle cost constraint ≤ $1/month). After 30 days, data is in S3 only (queryable via Athena per NFR-OPS-3). Requires human approval for DB schema changes per AGENTS.md §12. | Phase 6 |
+| **Audit-log retention** — spec implies 30-day S3 archive, but no clear policy on active-DynamoDB retention. Original proposal was 90 days; revised per human decision. | **30 days hot in DynamoDB**. After 30 days, data is in S3 only (queryable via Athena per NFR-OPS-3). Retention is an operational policy, not a claim that the full stack stays within a fixed monthly dollar amount. Requires human approval for DB schema changes per AGENTS.md §12. | Phase 6 |
 | **GSI write cost** — `gsi_sessions_by_user` projects every Registration write. Acceptable at MVP scale; revisit if write volume grows. | Carried forward to Phase 6 hardening. | Phase 6 |
 | **`session_cache` table definition** — not enumerated in this ERD because Phase 2 has not finalized the contents. | **Deferred to Phase 3.** Table is provisioned in Phase 2 (Task 2.2, Terraform); schema definition added in Phase 3 when contents are finalized. | Phase 3 |
 | **`idempotency` table** — referenced in `docs/api_contracts.md` §1.6 for `POST /match/run` idempotency but not enumerated in ERD §1. | **Deferred to Phase 4.** Table definition (PK=`IDEMPOTENCY#<sub>#<session>#<key>`, SK=`METADATA`, TTL=24h) added in Phase 4 when the matching engine endpoint is implemented. Not provisioned in Phase 2. | Phase 4 |

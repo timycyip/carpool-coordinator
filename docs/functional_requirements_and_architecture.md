@@ -1,19 +1,19 @@
-> **Amendment pointer (Phase 2 housekeeping):** This spec is v3.0 and already incorporates
-> the resolutions below. This banner is an at-a-glance overlay, not a content fix.
-> Superseding ADRs: ADR-0001 (multi-table DynamoDB, supersedes single-table assumption),
-> ADR-0008 (deferred notification delivery, supersedes synchronous email). See `docs/adr/`.
+> **Amendment pointer:** This spec is v3.1 and incorporates Phase 1 resolutions plus
+> the cost-first capacity, backup, provider-quota, back-pressure, and static Pages
+> decisions in ADR-0015 and ADR-0016. See `docs/adr/` for superseded decisions.
 
 # Carpool Matching Application — Functional Requirements & Solution Architecture (v3)
 
 ## Version
-v3.0 (Updated with Phase 1 Discovery resolutions)
+v3.1 (Updated with Phase 1 resolutions and cost-first architecture decisions)
 
 ## Revision Log
 
 | Version | Date | Changes |
 |---------|------|---------|
 | v2.0 | 2026-06-23 | Initial stakeholder-reviewed spec |
-| v3.0 | 2026-06-23 | Phase 1 Discovery resolutions: canonical registration schema replaces FR-3/FR-4; NFRs expanded with testable acceptance criteria; FR-5 routing provider changed to ORS; FR-10 notifications changed to deferred delivery (ADR-0008); §8 data model updated to multi-table (ADR-0001); §10 AWS components updated to 5 tables; session status enum changed to snake_case; frontend locked to Next.js; idle cost NFR corrected |
+| v3.0 | 2026-06-23 | Phase 1 Discovery resolutions: canonical registration schema replaces FR-3/FR-4; NFRs expanded with testable acceptance criteria; FR-5 routing provider changed to ORS; FR-10 notifications changed to deferred delivery (ADR-0008); §8 data model updated to multi-table (ADR-0001); §10 AWS components updated to 5 tables; session status enum changed to snake_case; frontend locked to Next.js |
+| v3.1 | 2026-10-01 | Cost-first target: provisioned DynamoDB within shared free capacity (ADR-0015), non-production PITR disabled, provider fixtures/quotas, ORS endpoint-specific limits, and safe back-pressure replace on-demand/unbounded-burst assumptions |
 
 > **Note:** This spec is now the single source of truth for all functional and non-functional requirements. The `docs/requirements_baseline.md` is a thin delta document tracking review status and sign-off only.
 
@@ -338,9 +338,10 @@ Calculate:
 Provider:
 
 * OpenRouteService (ORS) free-tier API (`/v2/directions`, `/v2/matrix`)
-* Free tier: 2000 req/day, 40 req/min, ~50 locations per matrix call
-* Matrix calls must be chunked for sessions with >50 locations
-* ORS self-hosting is available as an upgrade path post-MVP if free-tier rate limits (2,000 req/day) become a bottleneck. OSRM was considered but requires self-hosting at all times — rejected in favor of ORS hosted free tier.
+* Published ORS Standard plan limits are endpoint-specific: 2,000 directions requests/day and 500 matrix requests/day, with 40 requests/minute. Confirm current limits in the application's ORS account before relying on them. Matrix calls are limited to 3,500 origin-destination pairs per request.
+* Dev/staging use deterministic geocoding, routing, and notification fixtures by default. Live provider checks are opt-in, bounded by a shared provider-wide daily/minute quota and by per-user/per-session limits, and use cached results where possible.
+* Build only the candidate matrix after geographic pre-filtering; chunk requests to stay within current ORS per-request origin-destination-pair limits.
+* Self-hosting a routing engine is an upgrade path only if hosted-provider limits become a bottleneck; it adds infrastructure and operational cost and does not belong in the near-zero-cost baseline.
 
 Required endpoints:
 
@@ -525,7 +526,7 @@ Each NFR must be verifiable by an automated test, a CloudWatch metric + alarm, o
 | ID | Requirement | Acceptance Criteria (testable) |
 | --- | --- | --- |
 | NFR-PERF-1 | API latency p95 < 800ms | Measured at the Lambda Function URL via CloudWatch EMF metrics. p95 of all 2xx + 4xx API responses, sampled over a rolling 24h window, is < 800ms. Matching endpoints (`POST /match/run`) are excluded from this SLO. |
-| NFR-PERF-2 | Matching completes < 30s for 500 users | End-to-end `POST /sessions/{code}/match/run` (request → 200 with proposed match) completes in < 30s wall-clock for a session with 500 registrants in a memory-isolated Lambda benchmark. Validated in Phase 4 spike and re-verified in Phase 6 load test. (MVP greedy solver caps at <300 users; 500-user target is a Phase 6 post-MVP goal.) |
+| NFR-PERF-2 | Measure matching within provider and runtime limits | MVP synchronous matching targets sessions up to 300 users with <30s runtime only where pre-filtered/cached matrix calls fit provider quotas. Phase 6 records size, runtime, and provider calls; 500-user synchronous matching is post-MVP and requires a demonstrated quota-compatible design. |
 | NFR-PERF-3 | Cold-start p95 < 1500ms | First-request latency after a 10-minute idle window is p95 < 1500ms. Tracked via CloudWatch `init_duration`. Provisioned concurrency is evaluated in Phase 6 if not met. |
 | NFR-PERF-4 | Frontend LCP < 2.5s on 4G | Largest Contentful Paint on the registration dashboard is < 2.5s. Verified in Phase 2 bootstrap and re-verified in Phase 6. |
 
@@ -540,8 +541,8 @@ Each NFR must be verifiable by an automated test, a CloudWatch metric + alarm, o
 
 | ID | Requirement | Acceptance Criteria |
 | --- | --- | --- |
-| NFR-SCALE-1 | Handle bursts up to 5000 req/min | Sustained 5000 req/min for 5 minutes produces zero 5xx responses and no DynamoDB throttling (per ADR-0007 on-demand capacity). Validated via Phase 6 load test. |
-| NFR-SCALE-2 | Idle cost ≤ $1/month | Monthly AWS bill for an idle deployment (no traffic for 30 days) is ≤ $1.00 (CloudWatch Logs ingestion may incur minimal cost). Verified by a monthly cost-anomaly review. |
+| NFR-SCALE-1 | Cost-first capacity with safe back-pressure | Stay within the shared provisioned DynamoDB free allowance by default. Load tests document sustainable throughput and verify that requests above table/index capacity receive safe, retryable back-pressure rather than silent data loss. Any capacity increase beyond the free allowance requires a measured cost decision. |
+| NFR-SCALE-2 | Near-zero monthly cost target | Optimize for the shared always-free DynamoDB provisioned allowance and low/zero idle compute. A $5 account-wide monthly AWS Budget alerts at 80% actual and 100% forecast; it does not cap charges. Review the actual bill monthly. |
 | NFR-SCALE-3 | Multi-session per user | A single authenticated user can hold active registrations in ≥10 sessions concurrently without quota error. |
 
 ## 6.4 Security
@@ -752,7 +753,7 @@ Tables (per ADR-0001 — named per data model):
 * `brute_force_counter` (failed-auth tracking, TTL)
 * `geocode_cache` (postal-code → lat/lon cache, 30-day TTL)
 
-All tables use on-demand capacity (ADR-0007). See `docs/data_model_erd.md` for the full schema.
+All tables and GSIs use provisioned capacity within the account-wide free allowance by default (ADR-0015). See `docs/data_model_erd.md` for the full schema and `docs/cost-controls.md` for throughput assumptions and back-pressure behavior.
 
 ---
 
@@ -801,8 +802,8 @@ Use for:
 * abuse investigation
 * debugging
 
-Idle cost:
-≤ $1/month (CloudWatch Logs ingestion may incur minimal cost)
+Cost target:
+Near-zero shared account spend through free-tier capacity, fixtures, caching, and bounded provider usage. See NFR-SCALE-2 and `docs/cost-controls.md`; this is an optimization target, not a guarantee under arbitrary traffic.
 
 ---
 
@@ -981,7 +982,7 @@ Framework:
 Next.js (App Router) — locked decision
 
 Deployment:
-Cloudflare Pages via `next-on-pages` (preview per branch, production on merge to main)
+Cloudflare Pages static export with an API-only Pages Function proxy (dev/staging previews; production promotion gated)
 
 Benefits:
 
@@ -1099,7 +1100,7 @@ Total:
 
 | Risk              | Severity | Mitigation           |
 | ----------------- | -------- | -------------------- |
-| OSM rate limits   | High     | Use ORS free tier (2000 req/day); cache geocoding results; self-hosting deferred post-MVP       |
+| Provider quotas   | High     | Use fixtures outside production, cache provider results, and enforce endpoint-specific account-wide ORS and Nominatim limits (see §6 / cost-controls.md) |
 | Matching too slow | High     | Async jobs           |
 | Privacy leakage   | High     | Strict RBAC          |
 | Cost spikes       | Medium   | Reserved concurrency |
@@ -1154,4 +1155,3 @@ This improves reliability for large sessions (200+ participants).
 - https://github.com/LivingCat/MSSI1819
 - https://github.com/Sn00pyW00dst0ck/Carpool-Creator
 - https://github.com/thefriedbee/CarpoolSim
-

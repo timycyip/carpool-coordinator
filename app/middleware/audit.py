@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, Request
 
+from app.config import app_data_table_name
 from app.db import get_ddb_client
 from app.repositories.audit import AuditRepository
 
@@ -35,8 +36,6 @@ EVENT_SESSION_UPDATED = "session.updated"
 EVENT_SESSION_DELETED = "session.deleted"
 EVENT_SESSION_ADMIN_ASSIGN = "session_admin.assign"
 EVENT_RBAC_DENIED = "rbac.denied"
-
-_AUDIT_TABLE = "app_data"
 
 
 def _extract_ip(request: Request) -> str:
@@ -57,8 +56,9 @@ class AuditLogger:
     (see ``tests/conftest.py::ddb_client``).
     """
 
-    def __init__(self, client: DynamoDBClient, table_name: str = _AUDIT_TABLE) -> None:
-        self._repo = AuditRepository(table_name=table_name, client=client)
+    def __init__(self, client: DynamoDBClient, table_name: str | None = None) -> None:
+        resolved_table_name = table_name or app_data_table_name()
+        self._repo = AuditRepository(table_name=resolved_table_name, client=client)
         self._pending: set[asyncio.Task[None]] = set()
 
     async def log(
