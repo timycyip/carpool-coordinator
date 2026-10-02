@@ -50,7 +50,7 @@ Manager (60) check.
 ```python
 def require_role(*allowed: Role) -> Callable[..., TokenPayload]:
     """FastAPI dependency that enforces deny-default RBAC.
-    
+
     Returns 403 if the current user's effective role set does not
     contain any of the allowed roles.
     """
