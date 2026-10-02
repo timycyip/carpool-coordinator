@@ -34,6 +34,6 @@ Rejected because it spends Workers Free requests on static assets. `_routes.json
 
 ## Links
 - Supersedes [ADR-0004](0004-same-origin-rewrites.md) for deployed frontend routing.
-- [Phase 2 plan](../../plans/phase-2-foundation.md)
+- [Phase 2 plan](../../doc/plans/phase-2-foundation.md)
 - [Cloudflare Pages Functions routing](https://developers.cloudflare.com/pages/functions/routing/)
 - [Next.js static export](https://nextjs.org/docs/app/building-your-application/deploying/static-exports)

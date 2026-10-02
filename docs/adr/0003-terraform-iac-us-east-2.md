@@ -69,6 +69,6 @@ The Terraform workspace lives in `infra/` at the repo root. It provisions:
 - **Region locked to `us-east-2`** — affects latency to users and AWS service pricing.
 
 ## Links
-- Phase 2 plan Task 2.2 (DynamoDB schema): `plans/phase-2-foundation.md`
-- Phase 2 plan Task 2.10 (CI/CD): `plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.2 (DynamoDB schema): `doc/plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.10 (CI/CD): `doc/plans/phase-2-foundation.md`
 - ARCHITECTURE.md §Technology Stack: `ARCHITECTURE.md`

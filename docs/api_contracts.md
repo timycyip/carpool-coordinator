@@ -7,7 +7,7 @@
 | **Date** | 2026-06-23 |
 | **Author Role** | Solution Architect |
 | **Status** | **Draft** — pending review by Tech Lead and Backend Engineers |
-| **Phase** | 1 — Discovery, Task 5 (per `plans/phase-1-discovery.md`) |
+| **Phase** | 1 — Discovery, Task 5 (per `doc/plans/phase-1-discovery.md`) |
 | **Related artifacts** | Master spec `docs/functional_requirements_and_architecture.md` §9 (REST API), §14 (Security Controls); RBAC `docs/rbac_matrix.md`; Auth model `docs/adr/0002-app-session-jwt.md`; Middleware ordering `docs/adr/0005-middleware-ordering.md`; Requirements baseline `docs/requirements_baseline.md` §3 (canonical registration schema) |
 
 ---
@@ -503,7 +503,7 @@ Query audit logs (FR-11).
 
 ### 3.17 `POST /sessions/{code}/admin` **(new endpoint)**
 
-Assign a user as Session Admin for the session. Defined in `docs/rbac_matrix.md` §4 and `plans/phase-1-discovery.md` Task 2.
+Assign a user as Session Admin for the session. Defined in `docs/rbac_matrix.md` §4 and `doc/plans/phase-1-discovery.md` Task 2.
 
 | Aspect | Value |
 | --- | --- |

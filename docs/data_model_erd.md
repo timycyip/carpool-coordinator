@@ -322,7 +322,7 @@ AGENTS.md §12.
 
 ## 4. Match Versioning Rule
 
-Per `plans/phase-1-discovery.md` Task 4. Authoritative — referenced by Phase 4 and
+Per `doc/plans/phase-1-discovery.md` Task 4. Authoritative — referenced by Phase 4 and
 Phase 5 implementations.
 
 1. **Every `POST /sessions/{code}/match/run` writes a NEW item** with
@@ -387,7 +387,7 @@ read path is idempotent (re-derive / re-increment on miss).
 - Spec §8 — Data Model (PK/SK primitives; this ERD refines the spec into implementable
   patterns).
 - Spec §7 — Session Geometry Model (`anchor_location` attribute on Session).
-- `plans/phase-1-discovery.md` Task 4 — source for the GSI list and the match-versioning
+- `doc/plans/phase-1-discovery.md` Task 4 — source for the GSI list and the match-versioning
   rule.
 - FR-1 — Authentication (User entity; `google_sub` is the durable subject identifier).
 - FR-2 — Session attributes (Session entity).
@@ -507,7 +507,7 @@ erDiagram
 | Question | Resolution | Phase |
 | --- | --- | --- |
 | **Session cache contents** — what specifically goes in `session_cache`? Candidates: hot "current approved match per session" pointer, or short-lived registration-in-progress state. | **Deferred to Phase 3.** Not needed by any Phase 2 code path. Added to Phase 3 task list. | Phase 3 |
-| **Geocode cache key normalization** — Phase 3 must lock the normalization (uppercase, strip whitespace, handle Canadian postal codes `A1A 1A1`, US ZIP+4). | Carried forward to Phase 3. Already called out in `plans/phase-3-registration.md`. | Phase 3 |
+| **Geocode cache key normalization** — Phase 3 must lock the normalization (uppercase, strip whitespace, handle Canadian postal codes `A1A 1A1`, US ZIP+4). | Carried forward to Phase 3. Already called out in `doc/plans/phase-3-registration.md`. | Phase 3 |
 | **Audit-log retention** — spec implies 30-day S3 archive, but no clear policy on active-DynamoDB retention. Original proposal was 90 days; revised per human decision. | **30 days hot in DynamoDB**. After 30 days, data is in S3 only (queryable via Athena per NFR-OPS-3). Retention is an operational policy, not a claim that the full stack stays within a fixed monthly dollar amount. Requires human approval for DB schema changes per AGENTS.md §12. | Phase 6 |
 | **GSI write cost** — `gsi_sessions_by_user` projects every Registration write. Acceptable at MVP scale; revisit if write volume grows. | Carried forward to Phase 6 hardening. | Phase 6 |
 | **`session_cache` table definition** — not enumerated in this ERD because Phase 2 has not finalized the contents. | **Deferred to Phase 3.** Table is provisioned in Phase 2 (Task 2.2, Terraform); schema definition added in Phase 3 when contents are finalized. | Phase 3 |

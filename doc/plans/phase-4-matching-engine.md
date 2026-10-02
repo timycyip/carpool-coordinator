@@ -13,7 +13,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 | Priority | ID | Advisory | Owner |
 |----------|----|----------|-------|
 | **Phase 4** | A8 | NFR-PERF-2 targets "Matching < 30s for 500 users" but the MVP greedy solver caps at <300 users per the spec. The 500-user NFR is untestable on the MVP solver. Resolution: lower the NFR to 300 users for MVP and add a post-MVP NFR for 500 users in Phase 6. Update `docs/requirements_baseline.md` NFR-PERF-2. | Planning |
-| **Anytime** | A6 | Broken link in `docs/requirements_baseline.md` Appendix A: `plans/phase-4-matching.md` should be `plans/phase-4-matching-engine.md`. Fix the link. | Planning |
+| **Anytime** | A6 | Resolved: `docs/requirements_baseline.md` Appendix A points to `doc/plans/phase-4-matching-engine.md`. | Complete |
 
 ### Cross-phase blockers from Phase 2 review (2026-06-24)
 

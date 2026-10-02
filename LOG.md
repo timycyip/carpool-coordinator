@@ -28,7 +28,7 @@ Running log of completed tasks with dates, scope, and verification status.
 4. **API design patterns** — Contract-first (Pydantic `response_model` on every endpoint),
    consistent error envelope, input/output model separation. ADR-0009 records the decision.
 
-5. **Housekeeping** — A1 banner on `plans/phase-1-discovery.md`, A5 banner on master spec,
+5. **Housekeeping** — A1 banner on `doc/plans/phase-1-discovery.md`, A5 banner on master spec,
    `KNOWLEDGE.md` created with ADR summaries and resolved OQs.
 
 6. **Documentation** — README rewritten (Quick Start, Commands, Architecture, ADR table),
@@ -117,7 +117,7 @@ decision.
 | **Task** | 2.11 |
 | **Status** | DONE |
 | **Date** | 2026-06-24 |
-| **Plan ref** | `plans/phase-2-foundation.md` Task 2.11 |
+| **Plan ref** | `doc/plans/phase-2-foundation.md` Task 2.11 |
 | **Branch** | `phase-2-task-2-11-frontend-bootstrap` |
 
 ### What was implemented

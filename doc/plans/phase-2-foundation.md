@@ -28,7 +28,7 @@ These advisories from the Phase 1 consolidated review must be addressed during P
 
 | Priority | ID | Advisory | Owner |
 |----------|----|----------|-------|
-| **Week 1** | A1 | `plans/phase-1-discovery.md` Decisions section still references stale pre-ADR decisions (single consolidated table, synchronous email). Add an ADR supersession banner at the top of the plan. | Task 2.1 |
+| **Week 1** | A1 | `doc/plans/phase-1-discovery.md` Decisions section still references stale pre-ADR decisions (single consolidated table, synchronous email). Add an ADR supersession banner at the top of the plan. | Task 2.1 |
 | **Week 1** | A3 | `KNOWLEDGE.md` not created at repo root. AGENTS.md §17 requires it after first task wrap-up. Capture: ADR-0001 multi-table rationale, ADR-0008 deferred-delivery reversal, canonical schema supremacy principle. | Task 2.1 |
 | **Week 1** | A5 | `docs/functional_requirements_and_architecture.md` (master spec) §10 lists 4 tables (now 5 per ADR-0001) and §13/§14 describe synchronous email (now deferred per ADR-0008). Add an amendment banner at the top of the spec listing superseding ADRs. | Task 2.1 |
 | **Phase 2** | A7 | `gsi_latest_match_by_session` in the ERD is architecturally redundant — the main-table Query on `SESSION#<code>` + `SK begins_with MATCH#` returns the same data at identical cost. During Task 2.2, evaluate: drop the GSI or document the cost-benefit rationale. | Task 2.2 |
@@ -186,7 +186,7 @@ src/                        → Legacy CLI (untouched in Phase 2; matching logic
 test/                       → Legacy unittest tests (untouched)
 mock/                       → Legacy CSV fixtures
 docs/                       → Requirements + architecture + Phase 1 design artifacts
-plans/                      → Phase plans (this file + phase-1, phase-3..6)
+doc/plans/                      → Phase plans (this file + phase-1, phase-3..6)
 docs/adr/           → Architecture Decision Records
 .github/workflows/          → CI/CD (backend-ci.yml, frontend-ci.yml added; legacy pylint/unittest remain for src/)
 ```
@@ -467,7 +467,7 @@ Browser ──HTTPS──► Cloudflare Pages (static assets)
 > and a scope estimate.
 
 > Phase 1 (Discovery) produces design artifacts, not code. It runs in parallel and is tracked in
-> `plans/phase-1-discovery.md`. Phase 1 is **complete as of 2026-06-23** — `docs/api_contracts.md`,
+> `doc/plans/phase-1-discovery.md`. Phase 1 is **complete as of 2026-06-23** — `docs/api_contracts.md`,
 > `docs/data_model_erd.md`, `docs/rbac_matrix.md`, and `docs/requirements_baseline.md` are all
 > present. Wireframes exist in `docs/wireframes/`. No blockers remain.
 
@@ -548,7 +548,7 @@ Browser ──HTTPS──► Cloudflare Pages (static assets)
 
 | Advisory | Action | Assigned To |
 |----------|--------|-------------|
-| **A1** — Add ADR supersession banner to `plans/phase-1-discovery.md` | Edit the Decisions section to note that ADR-0001 (multi-table) and ADR-0008 (deferred email) supersede the original plan's assumptions. | Task 2.1 (housekeeping) |
+| **A1** — Add ADR supersession banner to `doc/plans/phase-1-discovery.md` | Edit the Decisions section to note that ADR-0001 (multi-table) and ADR-0008 (deferred email) supersede the original plan's assumptions. | Task 2.1 (housekeeping) |
 | **A3** — Create `KNOWLEDGE.md` at repo root | Capture: ADR-0001 multi-table rationale, ADR-0008 deferred-delivery reversal, canonical schema supremacy principle, Phase 1 lessons learned. | Task 2.1 (housekeeping) |
 | **A5** — Add amendment banner to master spec | Add a banner at the top of `docs/functional_requirements_and_architecture.md` listing superseding ADRs (0001, 0008). | Task 2.1 (housekeeping) |
 | **A7** — Evaluate `gsi_latest_match_by_session` redundancy | During repository implementation, assess whether the main-table `Query` on `SESSION#<code>` + `SK begins_with MATCH#` with `ScanIndexForward=false, Limit=1` is sufficient to replace the GSI. Document rationale in a code comment on the Match repository. | Task 2.2 |
@@ -571,7 +571,7 @@ A1, A3, A5 (housekeeping edits to existing docs).
 - [ ] `requirements.txt` pins `fastapi`, `mangum`, `uvicorn[standard]`
 - [ ] `tests/test_health.py` uses `TestClient` from `fastapi.testclient`; one smoke test for `/health`
 - [ ] `tests/conftest.py` defines `@pytest.fixture` for the FastAPI `TestClient`
-- [ ] **A1 resolved:** `plans/phase-1-discovery.md` Decisions section has a banner noting ADR-0001/0008 supersession
+- [ ] **A1 resolved:** `doc/plans/phase-1-discovery.md` Decisions section has a banner noting ADR-0001/0008 supersession
 - [ ] **A3 resolved:** `KNOWLEDGE.md` exists at repo root with Phase 1 lessons (see `docs/requirements_baseline.md` §4 for resolved OQs)
 - [ ] **A5 resolved:** `docs/functional_requirements_and_architecture.md` has an amendment banner at line 1 listing superseding ADRs
 
@@ -598,7 +598,7 @@ A1, A3, A5 (housekeeping edits to existing docs).
 - `tests/test_health.py` (smoke test)
 - `pyproject.toml`
 - `requirements.txt`
-- `plans/phase-1-discovery.md` (edit — add A1 banner)
+- `doc/plans/phase-1-discovery.md` (edit — add A1 banner)
 - `KNOWLEDGE.md` (create — A3)
 - `docs/functional_requirements_and_architecture.md` (edit — add A5 banner)
 

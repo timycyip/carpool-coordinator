@@ -47,7 +47,7 @@ Provides fast recovery but adds continuous backup storage cost. Rejected for dis
 
 ## Links
 - Supersedes the default billing-mode decision in [ADR-0007](0007-dynamodb-on-demand.md) for this cost-first deployment.
-- [Phase 2 plan](../../plans/phase-2-foundation.md)
-- [Phase 3 plan](../../plans/phase-3-registration.md)
-- [Phase 4 plan](../../plans/phase-4-matching-engine.md)
-- [Phase 5 plan](../../plans/phase-5-approval-notification.md)
+- [Phase 2 plan](../../doc/plans/phase-2-foundation.md)
+- [Phase 3 plan](../../doc/plans/phase-3-registration.md)
+- [Phase 4 plan](../../doc/plans/phase-4-matching-engine.md)
+- [Phase 5 plan](../../doc/plans/phase-5-approval-notification.md)

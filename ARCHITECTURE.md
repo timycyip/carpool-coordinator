@@ -1,12 +1,12 @@
 # Carpool Coordinator — System Architecture (Phase 2 Foundation)
 
-> **Status:** Reconciled with the locked decisions in `plans/phase-2-foundation.md` (Progress &
+> **Status:** Reconciled with the locked decisions in `doc/plans/phase-2-foundation.md` (Progress &
 > Decision Log, 2026-06-23) and ADR-0001. Architecture decisions that are hard to reverse require
 > an ADR per AGENTS.md §12. This document scopes the **Phase 2 foundation** and notes forward-looking
 > hooks for Phases 3–6 without designing them in detail.
 >
 > **Companion docs:** `docs/functional_requirements_and_architecture.md` (master spec, v2),
-> `plans/phase-2-foundation.md` (spec + plan + tasks + decision log), `docs/adr/` (ADRs).
+> `doc/plans/phase-2-foundation.md` (spec + plan + tasks + decision log), `docs/adr/` (ADRs).
 >
 > **Prerequisite:** Phase 2 implementation is **gated on Phase 1 Discovery** completing
 > `docs/api_contracts.md`, `docs/data_model_erd.md`, and `docs/rbac_matrix.md` (resolved 2026-06-23).

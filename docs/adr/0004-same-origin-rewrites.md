@@ -71,7 +71,7 @@ Frontend calls the Lambda URL directly. Backend sets `Access-Control-Allow-Origi
 
 ## Links
 - ADR-0002 (JWT in-memory): `docs/adr/0002-app-session-jwt.md`
-- Phase 2 plan Task 2.11 (Frontend bootstrap): `plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.11 (Frontend bootstrap): `doc/plans/phase-2-foundation.md`
 - ARCHITECTURE.md §Architecture Principles: `ARCHITECTURE.md`
 
 ## Supersession

@@ -73,5 +73,5 @@ in, but this is a rare degraded state.
   The login flow shows "temporarily unavailable, try again" (better than a cryptic 401).
 
 ## Links
-- Phase 2 plan Task 2.3 (Google OIDC auth): `plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.3 (Google OIDC auth): `doc/plans/phase-2-foundation.md`
 - ARCHITECTURE.md §Failure Modes: `ARCHITECTURE.md`

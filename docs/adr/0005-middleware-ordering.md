@@ -65,6 +65,6 @@ Register rate_limit/audit/auth as global middleware on the FastAPI app.
   write must never increase response latency.
 
 ## Links
-- Phase 2 plan Tasks 2.4, 2.8, 2.9: `plans/phase-2-foundation.md`
+- Phase 2 plan Tasks 2.4, 2.8, 2.9: `doc/plans/phase-2-foundation.md`
 - ADR-0002 (JWT auth): `docs/adr/0002-app-session-jwt.md`
 - ARCHITECTURE.md §Backend layering: `ARCHITECTURE.md`

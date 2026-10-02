@@ -8,7 +8,7 @@
 - Master spec: `docs/functional_requirements_and_architecture.md` (§3 Stakeholders, §4 Authorization Model, FR-1, FR-7, FR-8, FR-9, §9 REST API)
 - Auth/session design: `docs/adr/0002-app-session-jwt.md`
 - Middleware ordering (where RBAC is enforced): `docs/adr/0005-middleware-ordering.md`
-- Phase plan: `plans/phase-1-discovery.md` Task 2
+- Phase plan: `doc/plans/phase-1-discovery.md` Task 2
 
 ---
 

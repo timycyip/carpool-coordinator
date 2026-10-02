@@ -51,6 +51,6 @@ cloud access without long-lived AWS access keys in source control.
 
 ## References
 
-- [Phase 2 Foundation Plan](../../plans/phase-2-foundation.md)
+- [Phase 2 Foundation Plan](../../doc/plans/phase-2-foundation.md)
 - [Dev Deployment Setup](../dev-deployment-setup.md)
 - [Terraform IaC in us-east-2](0003-terraform-iac-us-east-2.md)

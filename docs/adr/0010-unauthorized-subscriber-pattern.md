@@ -86,6 +86,6 @@ Expose a `registerLogout(fn)` from a top-level React context that api-client cal
 ## Links
 - ADR-0002 (JWT in-memory): `docs/adr/0002-app-session-jwt.md`
 - ADR-0004 (same-origin rewrites): `docs/adr/0004-same-origin-rewrites.md`
-- Phase 2 plan Task 2.11: `plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.11: `doc/plans/phase-2-foundation.md`
 - `frontend/src/lib/api-client.ts` — subscriber registration + 401 invocation
 - `frontend/src/lib/auth-context.tsx` — `useEffect` subscription on mount

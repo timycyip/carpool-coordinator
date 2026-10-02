@@ -113,7 +113,7 @@ test/                       Legacy unittest tests (untouched)
 mock/                       Legacy CSV fixtures
 docs/                       Requirements, architecture, Phase 1 artifacts
   adr/                      Architecture Decision Records (0001–0009)
-plans/                      Phase plans (phase-1 through phase-6)
+doc/plans/                      Phase plans (phase-1 through phase-6)
 infra/                      IaC (Terraform) — Phase 2+
 frontend/                   Next.js app — Phase 2+
 ```
@@ -185,5 +185,5 @@ decision, alternatives considered, and consequences.
 
 - [Functional Requirements & Architecture](docs/functional_requirements_and_architecture.md)
 - [REST API Contract](docs/api_contracts.md)
-- [Phase Plans](plans/)
+- [Phase Plans](doc/plans/)
 - [Knowledge Base](KNOWLEDGE.md)

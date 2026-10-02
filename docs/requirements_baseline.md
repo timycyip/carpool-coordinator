@@ -73,7 +73,7 @@ baseline does not duplicate it.
 
 ## 4. Open Questions Register
 
-Open questions carried forward from `plans/phase-1-discovery.md` plus new ambiguities
+Open questions carried forward from `doc/plans/phase-1-discovery.md` plus new ambiguities
 surfaced during baseline drafting. All 13 are **Resolved**. None block Phase 2.
 
 | ID | Question | Resolution |
@@ -144,13 +144,13 @@ This target and its assumptions are documented in `docs/cost-controls.md` and th
 
 | FR | Phase | Primary plan reference | Primary ADR / doc reference |
 | --- | --- | --- | --- |
-| FR-1 | 2 | `plans/phase-2-foundation.md` | ADR-0002 (JWT session) |
-| FR-2 | 2 | `plans/phase-2-foundation.md` | — |
-| FR-3, FR-4 | 3 | `plans/phase-3-registration.md` | Master spec v3.1 §5 (canonical schema) |
-| FR-5 | 3 | `plans/phase-3-registration.md` | `docs/ideas/carpool-mvp-scope.md` (ORS choice) |
-| FR-6 | 4 | `plans/phase-4-matching-engine.md` | Master spec v3.1 §12 |
-| FR-7 | 5 | `plans/phase-5-approval-notification.md` | — |
-| FR-8 | 5 | `plans/phase-5-approval-notification.md` | — |
-| FR-9 | 5 | `plans/phase-5-approval-notification.md` | `docs/rbac_matrix.md` |
-| FR-10 | 5 | `plans/phase-5-approval-notification.md` | ADR-0008 (deferred delivery) |
-| FR-11 | 5 (write-path) / 6 (retention) | `plans/phase-5-approval-notification.md`, `plans/phase-6-hardening.md` | Master spec v3.1 §10 |
+| FR-1 | 2 | `doc/plans/phase-2-foundation.md` | ADR-0002 (JWT session) |
+| FR-2 | 2 | `doc/plans/phase-2-foundation.md` | — |
+| FR-3, FR-4 | 3 | `doc/plans/phase-3-registration.md` | Master spec v3.1 §5 (canonical schema) |
+| FR-5 | 3 | `doc/plans/phase-3-registration.md` | `docs/ideas/carpool-mvp-scope.md` (ORS choice) |
+| FR-6 | 4 | `doc/plans/phase-4-matching-engine.md` | Master spec v3.1 §12 |
+| FR-7 | 5 | `doc/plans/phase-5-approval-notification.md` | — |
+| FR-8 | 5 | `doc/plans/phase-5-approval-notification.md` | — |
+| FR-9 | 5 | `doc/plans/phase-5-approval-notification.md` | `docs/rbac_matrix.md` |
+| FR-10 | 5 | `doc/plans/phase-5-approval-notification.md` | ADR-0008 (deferred delivery) |
+| FR-11 | 5 (write-path) / 6 (retention) | `doc/plans/phase-5-approval-notification.md`, `doc/plans/phase-6-hardening.md` | Master spec v3.1 §10 |

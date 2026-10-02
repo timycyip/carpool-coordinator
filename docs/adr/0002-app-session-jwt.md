@@ -73,6 +73,6 @@ on the same domain) which can be achieved via Cloudflare Pages `rewrites()`.
 
 ## Links
 - Requirements doc §14 (Security Controls): `docs/functional_requirements_and_architecture.md`
-- Phase 2 plan Task 2.3 (Google OIDC auth): `plans/phase-2-foundation.md`
-- Phase 2 plan Task 2.11 (Frontend bootstrap / API client): `plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.3 (Google OIDC auth): `doc/plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.11 (Frontend bootstrap / API client): `doc/plans/phase-2-foundation.md`
 - ARCHITECTURE.md §Login flow: `ARCHITECTURE.md`

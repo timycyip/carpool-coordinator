@@ -101,5 +101,5 @@ exception handlers that serialize them into `ErrorResponse`.
 ## Links
 - `docs/api_contracts.md` §2 (Error Taxonomy), §5 (Pydantic stubs)
 - `docs/functional_requirements_and_architecture.md` v3 §11 (backend tech stack)
-- `plans/phase-2-foundation.md` §Code Style (conventions)
-- Task 2.1 plan: `.kilo/plans/1782326611319-backend-scaffold-health-endpoint.md`
+- `doc/plans/phase-2-foundation.md` §Code Style (conventions)
+- Task 2.1 plan: `doc/plans/1782326611319-backend-scaffold-health-endpoint.md`

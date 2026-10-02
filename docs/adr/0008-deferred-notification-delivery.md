@@ -7,7 +7,7 @@ Accepted
 2026-06-23
 
 ## Context
-The Phase 1 plan (`plans/phase-1-discovery.md`, "Decisions (locked)") recorded that email
+The Phase 1 plan (`doc/plans/phase-1-discovery.md`, "Decisions (locked)") recorded that email
 notifications would be sent **synchronously** from the API Lambda via Microsoft Graph
 `sendMail` → M365 Exchange. The v2 master spec (§10, §13) describes a fuller SQS →
 dedicated email Lambda → DLQ pipeline, but explicitly defers it post-MVP per
@@ -89,7 +89,7 @@ item per assigned participant when `notify: true` (the default).
   in Phase 5.
 
 ## Links
-- `plans/phase-1-discovery.md` — Decisions section, "Email delivery" line (now
+- `doc/plans/phase-1-discovery.md` — Decisions section, "Email delivery" line (now
   reflects this decision; the previous "synchronous" wording is superseded).
 - `docs/requirements_baseline.md` §4 OQ-6 (Resolved) and §2 FR-10 clarification (a).
 - `docs/api_contracts.md` §3.11 `POST /sessions/{code}/match/approve`,

@@ -61,5 +61,5 @@ above that capacity. This ADR remains as the record of the earlier on-demand dec
 
 ## Links
 - ADR-0001 (tables per data model): `docs/adr/0001-table-naming-by-data-model.md`
-- Phase 2 plan Task 2.2 (DynamoDB schema): `plans/phase-2-foundation.md`
+- Phase 2 plan Task 2.2 (DynamoDB schema): `doc/plans/phase-2-foundation.md`
 - ARCHITECTURE.md §Technology Stack: `ARCHITECTURE.md`

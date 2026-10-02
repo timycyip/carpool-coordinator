@@ -1,7 +1,7 @@
 # Plan — Task 2.1: Backend Project Scaffold + Health Endpoint [DONE]
 
 **Phase:** 2 (Foundation) · **Task:** 2.1 · **Scope:** S (skeleton, no business logic)
-**Source plan:** `plans/phase-2-foundation.md` Task 2.1 · **Spec:** `docs/functional_requirements_and_architecture.md` v3 §11
+**Source plan:** `doc/plans/phase-2-foundation.md` Task 2.1 · **Spec:** `docs/functional_requirements_and_architecture.md` v3 §11
 **Status:** DONE (2026-06-24) — see LOG.md for verification results
 
 ## Goal
@@ -35,7 +35,7 @@ A1, A3, A5. No auth/RBAC/DB/middleware logic in this task — pure scaffold + he
 - `pyproject.toml` — backend + dev deps, tool config (see below)
 
 ### Edit (housekeeping)
-- `plans/phase-1-discovery.md` (A1) — prepend a supersession banner to the **Decisions
+- `doc/plans/phase-1-discovery.md` (A1) — prepend a supersession banner to the **Decisions
   (locked)** section noting ADR-0001 (multi-table, supersedes single-table assumption) and
   ADR-0008 (deferred delivery, supersedes synchronous-email assumption). Note: lines 16 & 20
   already cite the ADRs; the banner is an explicit at-a-glance pointer per advisory A1.

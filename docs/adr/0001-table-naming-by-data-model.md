@@ -30,7 +30,7 @@ DynamoDB tables are **named per data model** as defined by the Phase 1 ERD
 `app_data` table.
 
 Concretely:
-- Phase 1 Discovery (`plans/phase-1-discovery.md` Task 4) produces the canonical ERD with
+- Phase 1 Discovery (`doc/plans/phase-1-discovery.md` Task 4) produces the canonical ERD with
   explicit table boundaries, partition/sort keys, GSIs, and TTL attributes.
 - Each logical entity group (e.g., application data, session cache, rate-limit counters,
   brute-force counters, geocode cache) maps to a **named table** decided by the ERD — not
@@ -74,9 +74,9 @@ per-table settings are tuned independently.
   `docs/data_model_erd.md` before Phase 2 Task 2.2 (DynamoDB schema + repository layer)
   can begin. Task 2.2 is updated to provision tables per the ERD via Terraform.
 - **Supersedes:** the "single table `app_data`" statements previously in
-  `plans/phase-2-foundation.md` (now corrected).
+  `doc/plans/phase-2-foundation.md` (now corrected).
 
 ## Links
 - Requirements doc Section 10 (Database): `docs/functional_requirements_and_architecture.md`
-- Phase 1 plan Task 4 (Data model ERD): `plans/phase-1-discovery.md`
-- Phase 2 plan Task 2.2 (DynamoDB schema + repository layer): `plans/phase-2-foundation.md`
+- Phase 1 plan Task 4 (Data model ERD): `doc/plans/phase-1-discovery.md`
+- Phase 2 plan Task 2.2 (DynamoDB schema + repository layer): `doc/plans/phase-2-foundation.md`

@@ -1,496 +1,370 @@
-# AGENTS.md — Carpool Coordinator
+# Carpool Coordinator — Shared Agent Protocol
 
-This file is the single source of truth for how AI agents (Kilo, subagents, Team Lead)
-operate on this repository. Read it before doing any work. It defines the project context,
-toolchain, workflow, quality gates, and the mapping from intent → skill → agent.
+This file defines the shared project protocol for coding assistants, including Cline, Kilo Code,
+Codex, ChatGPT, and other tools that read repository instructions. It describes project rules and
+workflows without requiring a particular agent framework.
 
----
+## Applicability
+
+Follow this file whenever it is provided to you or loaded from the repository. If a tool
+does not load `AGENTS.md`, the task setup or user must provide it. When loaded, these instructions
+apply subject to higher-priority system/developer instructions and the user's direct instructions.
+
+Use available skills, agents, commands, or workflow features when they help. If a named skill or
+delegation feature is unavailable, follow the relevant guidance directly. Tool limitations are
+not a reason to stop or silently skip necessary work.
 
 ## 1. Project Overview
 
-Carpool Coordinator is a **carpool coordination platform** for events (church gatherings,
-conferences, volunteering, school activities, group trips). It automates ride registration,
-passenger-driver matching, route optimization, an admin approval workflow, and assignment
-publishing.
+Carpool Coordinator coordinates rides to events through registration, driver/passenger matching,
+route optimization, administrator approval, and assignment publishing.
 
-The repository is mid-transformation:
+The repository contains a legacy Python CLI in `src/main.py` and a phased web-platform build. The
+target stack is FastAPI + Mangum on AWS Lambda (Python 3.12, ARM64), Next.js App Router on
+Cloudflare Pages, DynamoDB, Google OIDC, cached Nominatim geocoding, hosted OpenRouteService
+routing, and a greedy matching MVP. Treat the legacy CLI as a behavioral reference. New platform
+work belongs in `app/`, `frontend/`, and `infra/` as specified by the requirements and phase plans.
 
-- **Legacy** (`src/main.py`): a Python CLI script that reads a CSV of drivers/riders, geocodes
-  addresses with Nominatim, builds a scipy distance matrix, and writes matched carpools to a
-  CSV. Dependencies: `pandas`, `geopy`, `scipy`. Tests in `test/` are `unittest`-based stubs.
-- **Target** (per `docs/functional_requirements_and_architecture.md` v3): a full-stack web app —
-  FastAPI + Mangum on AWS Lambda ARM64, Next.js (App Router) on Cloudflare Pages, five DynamoDB
-  tables, Google OIDC, public Nominatim (cached geocoding) + hosted OpenRouteService (ORS) for
-  routing and matrices, and a
-  greedy matching MVP that reuses the legacy `src/main.py` logic relocated into
-  `app/services/matching.py`.
+The master specification is `docs/functional_requirements_and_architecture.md`. Read the relevant
+sections and the relevant phase plan before feature work. Phase and task plans live in
+`doc/plans/`; ordinary project documentation lives in `docs/`.
 
-The build-out is phased: **Phase 1 Discovery → Phase 6 Hardening** (see `plans/`).
+## 2. Core Rules
 
----
+1. **Inspect first.** Read the relevant files, check the working tree, and find existing patterns
+   before editing. Preserve unrelated user changes.
+2. **Keep plans together.** Every phase plan and task-level plan belongs in `doc/plans/`. Read and
+   update the relevant plan as scope or progress changes. Do not create plans in tool-specific
+   directories.
+3. **Specify non-trivial work.** Before implementation, record scope, requirements, dependencies,
+   and acceptance criteria in the relevant plan. The master specification is authoritative; phase
+   plans decompose it into deliverable work.
+4. **Use test-first development for behavior changes.** Add or update a failing test before
+   implementing logic. Use pytest for new backend code and the frontend's configured test runner.
+   Keep legacy `unittest` tests where they are unless the task touches them.
+5. **Follow phase order.** Do not implement a later phase while required earlier-phase work is
+   incomplete. Surface dependency conflicts instead of silently changing scope.
+6. **Protect secrets.** Never add credentials, OAuth client secrets, API keys, tokens, or private
+   keys to the repository. Use environment variables or the configured secret store.
+7. **Respect decision gates.** Get user direction before changing the public API contract,
+   authentication or authorization policy, database schema, a hard-to-reverse architecture
+   decision, deprecating an existing feature, or deploying to production, unless the user has
+   already explicitly authorized that specific action. Routine implementation choices within
+   accepted decisions do not need new approval.
+8. **Report evidence accurately.** State what changed and what was actually verified. Lint,
+   type-check, syntax-check, and local mock results do not prove a live deployment or provider
+   integration.
 
-## 2. Current Project Status
+## 3. Agent Observability & Rationale Requirements
 
-| Area | State |
+Leave enough rationale for another person or agent to understand important choices. Use the
+relevant plan, ADR, commit message, or pull request description; avoid duplicating the same text in
+every location.
+
+| Responsibility | Record |
 | --- | --- |
-| Legacy CLI | Present in `src/main.py`; superseded by the platform build but retained as the matching-algorithm reference. |
-| Phase 1 — Discovery | Complete. Design artifacts and decisions are recorded in `docs/`; see `plans/phase-1-discovery.md`. |
-| Phase 2 — Foundation | Active. FastAPI, Google OIDC, session/RBAC APIs, DynamoDB, Next.js, and non-production CI/deploy work are in progress; see the plan tracker. |
-| Phase 3 — Registration | Planned. Registration workflow, maps integration, driver/passenger UI. |
-| Phase 4 — Matching Engine | Planned. Route matrix, scoring, optimization (CVRPTW), admin override. Most complex phase. |
-| Phase 5 — Approval & Notification | Planned. Approval workflow, email via SQS → email Lambda → M365 Exchange, audit logging. |
-| Phase 6 — Hardening | Planned. Load testing, security review, observability, production readiness. |
-| CI | Legacy: `.github/workflows/{pylint,unittest}.yml` on Python 3.8–3.10. Target: ruff + mypy + pytest + Lambda/Pages deploy pipelines (Phase 2). |
-| Repo layout | `src/` (legacy), `test/` (legacy), `mock/` (CSV fixtures), `docs/` (requirements + architecture), `plans/` (phase plans), `.github/workflows/`. Target layout adds `app/` (backend) and a frontend project. |
+| Requirements analysis | Clarified requirements, resolved ambiguities, and accepted/deferred requirements in `docs/requirements_baseline.md` when applicable. |
+| Architecture | Technology choices, trade-offs, data-model decisions, GSI design, and service boundaries. Write an ADR when required by this section. |
+| Implementation | What changed, which specification or requirement it addresses, tests added, and deviations from the plan with reasons. |
+| Review | Findings by correctness, security, performance, and maintainability; include severity and required fixes. |
+| QA | Test plan, changed-code coverage when measured, edge cases, and applicable non-functional requirements. |
+| Operations | Operational impact, observability gaps, rollback approach, alerts, and failure modes for infrastructure or deployment work. |
+| Coordination | Phase progression, delegation choices when applicable, quality-gate results, and accepted risks. |
 
----
+Any decision that is hard to reverse or affects external APIs, the data model, security posture,
+or service architecture requires a numbered ADR in `docs/adr/NNNN-title.md`. Use
+`docs/adr/0000-template.md` and link the ADR from the related plan or change description.
 
-## 3. Development Environment
+## 4. Intent → Skill Mapping
 
-**Backend (target / all new Python work):**
-- Python **3.12** (Lambda ARM64 runtime target). Legacy code targets 3.8+.
-- Package manager: **`uv`** (preferred for new work); `pip` + `requirements.txt` still present for the legacy CLI.
-- Testing: **`pytest`**. Legacy tests use `unittest`; migrate as code is touched.
-- Linting/formatting: **`ruff`** (replaces `pylint`).
-- Type checking: **`mypy --strict`**.
-- Framework: FastAPI + Mangum (Lambda adapter).
+Use the matching skill when it is available in the current tool. If it is not available, apply the
+workflow directly using this protocol and the linked project documentation.
 
-**Frontend (Phase 2+):**
-- Node.js LTS + **Next.js** (App Router), TypeScript, Tailwind CSS.
-- Deployed as a static export to Cloudflare Pages; a Pages Function proxies only `/api/*`.
-- Tooling: `eslint`, `prettier`, `tsc --noEmit`, Vitest/Playwright (TBD in Phase 2).
+| User intent | Skill(s) |
+| --- | --- |
+| Build a feature or implement a requirement | `spec-driven-development` → `planning-and-task-breakdown` → `incremental-implementation` → `test-driven-development` |
+| Fix a bug | `debugging-and-error-recovery` → `test-driven-development` |
+| Refactor or simplify | `code-simplification` → `test-driven-development` |
+| Design an API or data model | `api-and-interface-design` → `system-architect` |
+| Review a change | `code-review-and-quality` → `reviewer` |
+| Set up or change CI/CD | `ci-cd-and-automation` and/or `devops` |
+| Harden security or authentication | `security-and-hardening` → `security` |
+| Optimize matching performance | `performance-optimization` → `system-architect` |
+| Define a test strategy | `quality-assurance` → `test-driven-development` |
+| Ship or prepare a release | `shipping-and-launch` → `sre` |
+| Investigate an incident | `sre` → `debugging-and-error-recovery` |
+| Write or update documentation or an ADR | `documentation-and-adrs` |
+| Migrate or deprecate old code | `deprecation-and-migration` |
+| Build or polish frontend UI | `frontend-ui-engineering` → `browser-testing-with-devtools` |
+| Refine a vague idea | `idea-refine` → `analyst` |
+| Wrap up completed work | `wrap_up_task` |
+| Configure a specific agent tool | Use that tool's configuration guidance; `kilo-config` applies only to Kilo configuration. |
 
-**Infrastructure:**
-- AWS Lambda ARM64, provisioned DynamoDB, S3, CloudWatch, Parameter Store, (SQS / Step Functions for large sessions).
-- Cloudflare (Pages + Free tier edge/WAF).
-- Hosted ORS for routing and matrices; public Nominatim (cached) for geocoding. Dev/staging use deterministic fixtures by default; live provider checks are controlled and quota-limited.
+## 5. Skill References
 
----
+Skill names refer to reusable workflow guidance that may be installed in a tool's skill catalog or
+provided as files. They are not commands that every tool must expose.
 
-## 4. Key Commands
+### Core workflow skills
 
-### Backend (Python — `app/` and any new code)
+| Skill | Purpose |
+| --- | --- |
+| `spec-driven-development` | Resolve scope and requirements before implementation. |
+| `planning-and-task-breakdown` | Break work into ordered tasks. |
+| `incremental-implementation` | Deliver changes in small, verifiable steps. |
+| `test-driven-development` | Write tests before behavior changes. |
+| `code-review-and-quality` | Review correctness, security, and maintainability. |
+| `git-workflow-and-versioning` | Branching, commits, and versioning. |
+| `documentation-and-adrs` | Record decisions and update project documentation. |
+| `using-agent-skills` | Discover and select applicable skills when this meta-skill is available. |
+
+### Specialized skills
+
+| Skill | Purpose |
+| --- | --- |
+| `analyst` | Clarify requirements and translate them into specifications. |
+| `api-and-interface-design` | Design stable APIs and module boundaries. |
+| `browser-testing-with-devtools` | Verify frontend behavior in a browser. |
+| `ci-cd-and-automation` | Set up or modify CI/CD. |
+| `code-simplification` | Refactor for clarity while preserving behavior. |
+| `collaboration-protocol` | Coordinate work across agents when supported. |
+| `context-engineering` | Curate project instructions and task context. |
+| `debugging-and-error-recovery` | Find and resolve the cause of failures. |
+| `deprecation-and-migration` | Migrate or retire existing systems safely. |
+| `devops` | CI/CD, deployment automation, and infrastructure as code. |
+| `frontend-ui-engineering` | Build production-quality frontend interfaces. |
+| `idea-refine` | Refine an early or ambiguous idea. |
+| `performance-optimization` | Profile and improve performance. |
+| `programmer` | Implement features using project conventions. |
+| `quality-assurance` | Plan and validate software quality. |
+| `reviewer` | Review changes and report actionable findings. |
+| `security` | Assess security design and implementation. |
+| `security-and-hardening` | Harden authentication, input handling, and integrations. |
+| `shipping-and-launch` | Prepare a release and rollout. |
+| `source-driven-development` | Ground technical decisions in authoritative documentation. |
+| `sre` | Address reliability, observability, and operations. |
+| `system-architect` | Make and document architecture decisions. |
+| `tech-lead` | Coordinate technical direction and quality gates. |
+| `wrap_up_task` | Summarize and close out completed work. |
+
+`kilo-config` applies only when configuring Kilo Code; it is tool-specific and is not required by
+this shared protocol.
+
+## 6. Agent Delegation & Responsibilities
+
+Delegate a separable task when the current environment supports agents and delegation will improve
+coverage or speed. Delegation is optional when unavailable or when the task is small. The primary
+agent remains responsible for integrating the work, checking its evidence, and reporting the
+result. Do not claim an independent review or test that was not performed.
+
+| Work area | Suggested responsibility |
+| --- | --- |
+| Requirements clarification | Analyst; update the requirements baseline when needed. |
+| Architecture or data design | System architect; write an ADR for a decision that meets §3. |
+| Implementation | Programmer; follow the plan and test-first rule. |
+| Code review | Reviewer; report findings and required fixes. |
+| Test design or coverage | QA; report what was covered and what remains unverified. |
+| Security assessment | Security reviewer; focus on trust boundaries, secrets, auth, and input handling. |
+| Deployment or operations | DevOps/SRE; document operational impact and rollback. |
+| Task coordination | Tech lead; keep phase, scope, quality gates, and risks visible. |
+
+Use the closest available role names in the host tool. If delegation is unavailable, do the work
+directly and state that no independent agent review occurred when that fact matters.
+
+## 7. Lifecycle Mapping
+
+| Lifecycle stage | Typical skills and work |
+| --- | --- |
+| **DEFINE** | `analyst`, `spec-driven-development`, `idea-refine`; settle scope and acceptance criteria. |
+| **PLAN** | `planning-and-task-breakdown`, `system-architect`, `api-and-interface-design`; write or update `doc/plans/`. |
+| **BUILD** | `incremental-implementation`, `test-driven-development`, `programmer`, `frontend-ui-engineering`. |
+| **VERIFY** | `quality-assurance`, `test-driven-development`, `browser-testing-with-devtools`; run relevant checks. |
+| **REVIEW** | `code-review-and-quality`, `reviewer`, `security-and-hardening`, `sre`, `performance-optimization`. |
+| **SHIP** | `ci-cd-and-automation`, `devops`, `shipping-and-launch`, `git-workflow-and-versioning`, `documentation-and-adrs`. |
+
+## 8. Agent-Driven Orchestration
+
+For each request:
+
+1. Check the applicable requirements in `docs/functional_requirements_and_architecture.md` and
+   the relevant phase plan in `doc/plans/`. Identify the phase and requirement when applicable.
+2. Choose the workflow and available skills using §§4 and 7 before making substantial changes.
+3. Inspect current files and changes, then work in small, reviewable steps.
+4. Delegate independent, specialized work when supported and useful; keep shared changes
+   coordinated.
+5. Validate against the Definition of Done in §11, adapting checks to the task's scope.
+6. Surface unresolved security, data-model, external-API, or architecture decisions before making
+   dependent changes. Honor approval already explicitly given by the user.
+
+## 9. Agent-Driven Development Workflow
+
+For non-trivial implementation work, follow these stages. Combine or omit a stage only when it is
+not applicable, and record material omissions and reasons in the task summary or plan.
+
+1. **PLANNING** — Analyze requirements, dependencies, and acceptance criteria; write or update the
+   relevant plan in `doc/plans/`.
+2. **IMPLEMENTATION** — Add/update tests first for behavior changes; implement incrementally.
+3. **REVIEW** — Review correctness, security, performance, and maintainability. Use an independent
+   reviewer when available and useful.
+4. **TESTING** — Run configured tests and quality gates relevant to the changed area; assess edge
+   cases and applicable non-functional requirements.
+5. **AUDIT** — For security, infrastructure, or deployment work, assess operational impact,
+   failure modes, observability, and rollback.
+6. **FIX** — Address review and audit findings, then repeat affected checks.
+7. **DOCUMENTATION** — Update README/docs, API documentation, `KNOWLEDGE.md`, plans, or ADRs as
+   appropriate.
+8. **COMMIT** — Commit with a descriptive message when the user asks or the active workflow
+   requires a commit.
+9. **PULL REQUEST** — Create or update a pull request when the user asks or the active workflow
+   requires one; link the relevant requirement, plan, and ADRs.
+
+## 10. Definition of Done (DoD)
+
+Apply these gates to relevant code changes. Documentation-only changes do not require application
+tests. User scope and higher-priority instructions may narrow what can be run; report any skipped
+or unavailable checks and the reason.
+
+### Tests
+
+- All relevant tests pass.
+- Changed behavior has appropriate coverage; the project target is over 80% for changed code when
+  coverage can be measured.
+- No new warnings are introduced, or warnings are explained.
+
+### Quality gates
+
+- Relevant lint, formatting, and type checks pass.
+- Frontend build and type checks pass for frontend changes.
+
+### Documentation and rationale
+
+- Update `README.md` for user-facing behavior or setup changes.
+- Document public functions/modules where the project conventions require it.
+- Update `KNOWLEDGE.md` with durable lessons or gotchas when useful.
+- Write an ADR for architecture decisions covered by §3.
+
+### Review and operations
+
+- Review the diff for correctness, security, performance, maintainability, and unintended edits.
+- Obtain independent review when available and useful; report when it was not performed.
+- For infrastructure/deployment changes, record operational effects, verification, and rollback
+  considerations.
+
+## 11. Completion Criteria
+
+A task is complete when the requested work is in place, relevant checks have passed or their
+limitations are reported, and required documentation is updated. Before claiming completion,
+confirm as applicable:
+
+- [ ] Requested behavior or documentation is implemented.
+- [ ] Relevant tests, type checks, lint, and format checks are run and their results recorded.
+- [ ] Changed-code coverage is measured when required and available.
+- [ ] `KNOWLEDGE.md` is updated when durable lessons were found.
+- [ ] Documentation and ADRs are updated where relevant.
+- [ ] Review and operational impact are reported where relevant.
+- [ ] Commit, pull request, or deployment is completed only when requested or required by the
+      active workflow; do not claim an action that did not happen.
+
+Do not equate static checks or mocks with live operation. State deployment and provider status
+only from observed evidence.
+
+## 12. Anti-Rationalization
+
+| Avoid this rationale | Required behavior |
+| --- | --- |
+| “This is too small to inspect.” | Read the relevant files and preserve existing work. |
+| “I can implement quickly without a plan.” | Record a lightweight plan for non-trivial work. |
+| “Tests slow me down.” | Use test-first development for behavior changes and run relevant checks. |
+| “The spec is inconvenient.” | Follow the specification or surface the conflict. |
+| “I know what the user intended.” | Resolve ambiguity from project evidence; ask when a material decision is still unclear. |
+| “I told another agent verbally.” | Keep consequential decisions and handoffs in the plan or change record. |
+| “Documentation can wait.” | Update relevant docs and ADRs before reporting completion. |
+| “A successful lint means it is deployed.” | Report only the evidence each check provides. |
+| “The tool lacks that skill or agent.” | Follow the workflow directly using this file. |
+
+## 13. Verification Commands
+
+Run commands relevant to the change from the indicated directory. Do not run irrelevant suites;
+report required checks that are unavailable or skipped and why.
+
+### Backend (`app/` and new Python code)
 
 ```bash
-# Install (uv)
-uv sync                                   # or: pip install -r requirements.txt
-uv pip install -e ".[dev]"                # dev extras (pytest, ruff, mypy) once pyproject.toml exists
-
-# Test
-pytest                                    # all tests
-pytest tests/ -k matching                 # filtered
-pytest --cov=app --cov-report=term-missing
-
-# Quality gates (all must pass before merge)
-ruff check .
-ruff format --check .
-mypy .
+uv sync
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy .
+uv run pytest --cov=app --cov-report=term-missing
 ```
 
-### Legacy CLI (still runnable)
+If the project is not using `uv` for the current checkout, use the equivalent installed commands:
+`pytest`, `ruff check .`, `ruff format --check .`, and `mypy .`.
+
+### Legacy CLI
 
 ```bash
 pip install -r requirements.txt
 python3 src/main.py <input_csv> <output_csv>
-python3 -m unittest                       # legacy tests (test/)
+python3 -m unittest
 ```
 
-### Frontend (Phase 2+)
+### Frontend (run from `frontend/`)
 
 ```bash
 npm install
-npm run dev                               # local Next.js
-npm run lint                              # eslint
-npx tsc --noEmit                          # type check
-npm run build                             # static production export
-npm test                                  # unit/integration (TBD)
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
 ```
 
-### Infrastructure (Phase 2+)
+### Infrastructure
 
-```bash
-# IaC (CDK or SAM — to be chosen in Phase 2)
-# Deploy Lambda package + Cloudflare Pages via GitHub Actions on merge to main
-```
+Use the Terraform validation/plan/apply steps in the relevant phase plan and environment guide.
+Do not apply infrastructure changes outside the user's authorization or the environment workflow;
+production deployment requires explicit approval as described in §2.
 
----
+## 14. Knowledge Base
 
-## 5. Core Rules
+- `KNOWLEDGE.md` at the repository root is the running log of durable lessons, gotchas, and
+  decisions useful to future contributors and agents.
+- Update it when a task discovers reusable knowledge; do not add routine progress notes that
+  belong in a plan or pull request.
+- Store architecture decisions in `docs/adr/`, not only in the knowledge base.
 
-1. **Skills first.** Before writing code, check the Intent → Skill Mapping (§7) and Lifecycle
-   Mapping (§8). Invoke the matching skill(s) via the `skill` tool. Do not "just implement".
-2. **Plan files live in `plans/`.** Every phase has a plan (`plans/phase-N-*.md`). Task-level
-   plans go in `plans/` as well. Read the relevant phase plan before starting work in that phase.
-3. **Skill / reference / agent locations:**
-   - **Global:** `~/.config/kilo/skills/`, `~/.config/kilo/agent/`.
-   - **Project-local:** `.kilo/skills/`, `.kilo/agent/`, `.kilo/command/`. Project-local overrides win.
-   - The `kilo-config` skill for this project is loaded from a project-local `builtin` location.
-4. **Specs before code.** Non-trivial features require a spec (use `spec-driven-development`)
-   before implementation. The `docs/functional_requirements_and_architecture.md` is the master
-   spec; phase plans decompose it.
-5. **Tests before code.** Follow `test-driven-development`. No logic lands without a failing
-   test first.
-6. **One phase at a time.** Do not implement Phase 4 code while Phase 2 artifacts are incomplete.
-   Respect the dependency order in `plans/`.
-7. **Legacy code is a reference, not the standard.** `src/main.py` matching logic is reused by
-   adaptation, not copy-paste. New code follows the target toolchain (ruff/mypy/pytest) and the
-   `app/` layout (§11 of the requirements doc).
-8. **Never commit secrets.** Google OAuth client secrets, AWS keys, and ORS credentials go in AWS
-   Parameter Store / environment — never in the repo.
+## 15. Configuration
 
----
+Runtime values belong in environment configuration or AWS Parameter Store, not hard-coded source
+or committed secrets.
 
-## 6. Agent Observability & Rationale Requirements
-
-Every agent must leave a visible rationale trail so decisions are traceable, reviewable, and
-auditable. Record rationale in the PR description, commit messages, `docs/adr/` (ADRs), and
-`KNOWLEDGE.md`.
-
-| Agent Role | Must Document |
-| --- | --- |
-| **Analyst** | Clarified requirements, resolved ambiguities, accepted/deferred FRs (update `docs/requirements_baseline.md`). |
-| **System Architect** | Technology choices, trade-offs, data-model decisions, GSI design, service boundaries. ADR required for any non-trivial architecture decision. |
-| **Programmer** | What was implemented, which spec/FR it satisfies, tests added, deviations from plan and why. |
-| **Reviewer** | Findings by axis (correctness, security, performance, maintainability), severity, and required fixes. |
-| **QA** | Test plan, coverage delta, edge cases covered, NFRs validated (p95 latency, 500-user matching < 30s). |
-| **SRE** | Ops impact, observability gaps, rollback plan, CloudWatch/alert additions, failure modes. |
-| **Tech Lead** | Phase progression decisions, delegation choices, quality-gate pass/fail rationale, risk acceptance. |
-
-**ADR requirement:** Any decision that is hard to reverse or affects external APIs, the data
-model, security posture, or the service architecture requires an Architecture Decision Record in
-`docs/adr/NNNN-title.md` (template: `docs/adr/0000-template.md`). Link the ADR from the PR.
-
----
-
-## 7. Intent → Skill Mapping
-
-| User Intent | Skill(s) to Trigger |
-| --- | --- |
-| "Build feature X" / "Implement FR-N" | `spec-driven-development` → `planning-and-task-breakdown` → `incremental-implementation` → `test-driven-development` |
-| "Fix this bug" | `debugging-and-error-recovery` → `test-driven-development` |
-| "Refactor this" / "clean up" | `code-simplification` (behavior-preserving) → `test-driven-development` |
-| "Design the API / data model" | `api-and-interface-design` → `system-architect` |
-| "Review this change / PR" | `code-review-and-quality` → `reviewer` |
-| "Set up CI/CD / deploy" | `ci-cd-and-automation` / `devops` |
-| "Harden security / auth" | `security-and-hardening` → `security` |
-| "Optimize matching performance" | `performance-optimization` → `system-architect` |
-| "Test strategy / coverage" | `quality-assurance` → `test-driven-development` |
-| "Ship to production" | `shipping-and-launch` → `sre` |
-| "Investigate incident / outage" | `sre` → `debugging-and-error-recovery` |
-| "Write/update docs or ADR" | `documentation-and-adrs` |
-| "Migrate / deprecate old code" | `deprecation-and-migration` |
-| "Build/polish frontend UI" | `frontend-ui-engineering` → `browser-testing-with-devtools` |
-| "Refine a vague idea" | `idea-refine` → `analyst` |
-| "Wrap up this task" | `wrap_up_task` |
-| "Set up / fix Kilo config" | `kilo-config` |
-
----
-
-## 8. Lifecycle Mapping
-
-High-level phases map to skills as follows:
-
-| Phase | Skills |
-| --- | --- |
-| **DEFINE** (requirements, scope) | `analyst`, `spec-driven-development`, `idea-refine` |
-| **PLAN** (break down, estimate) | `planning-and-task-breakdown`, `system-architect`, `api-and-interface-design` |
-| **BUILD** (implement) | `incremental-implementation`, `test-driven-development`, `programmer`, `frontend-ui-engineering` |
-| **VERIFY** (test, QA) | `quality-assurance`, `test-driven-development`, `browser-testing-with-devtools` |
-| **REVIEW** (code/security/audit) | `code-review-and-quality`, `reviewer`, `security-and-hardening`, `sre`, `performance-optimization` |
-| **SHIP** (deploy, launch) | `ci-cd-and-automation`, `devops`, `shipping-and-launch`, `git-workflow-and-versioning`, `documentation-and-adrs` |
-
----
-
-## 9. Agent-Driven Orchestration
-
-Agents operate autonomously within the workflow below. Principles:
-
-1. **Analyze** the request against `docs/functional_requirements_and_architecture.md` and the
-   relevant `plans/phase-N-*.md`. Identify which FR and which phase task this satisfies.
-2. **Determine the workflow** using §8 and §10. Pick skills before picking up a text editor.
-3. **Execute** incrementally — small, verifiable steps. Run the verification commands (§15)
-   after each step.
-4. **Delegate** to subagents when a task is specialized or parallelizable (see §12).
-5. **Validate** against the Definition of Done (§11) before declaring complete.
-6. **Admit uncertainty.** If a requirement is ambiguous or a decision needs human approval
-   (§12), stop and ask. Do not guess on security, data-model, or external-API changes.
-
----
-
-## 10. Development Workflow (Agent-Driven)
-
-Every non-trivial task follows these 9 mandatory phases in order:
-
-```
-1. PLANNING → 2. IMPLEMENTATION → 3. REVIEW → 4. TESTING → 5. AUDIT
-→ 6. FIX → 7. DOCUMENTATION → 8. COMMIT → 9. PULL REQUEST
-```
-
-1. **PLANNING** — Analyze requirements; break into ordered subtasks; identify dependencies;
-   write/update the relevant `plans/` artifact. Delegate to: `analyst`, `system-architect`.
-2. **IMPLEMENTATION** — Write tests first (TDD); implement incrementally; run verification
-   continuously. Delegate to: `programmer` with `test-driven-development`.
-3. **REVIEW** — Code, security, and architecture review. Delegate to: `reviewer`, `security`,
-   `system-architect`.
-4. **TESTING** — Coverage validation, edge cases, integration tests, NFR checks (latency,
-   500-user matching < 30s). Delegate to: `quality-assurance`.
-5. **AUDIT** — Operational, performance, and security audit. Delegate to: `sre`, `security`.
-6. **FIX** — Address review/audit feedback; fix bugs; iterate. Delegate to: `programmer`.
-7. **DOCUMENTATION** — Update README/docs, API docs, `KNOWLEDGE.md`, and ADRs for architectural
-   decisions. Delegate to: `documentation-and-adrs`.
-8. **COMMIT** — Commit with a descriptive message; create a PR. Delegate to:
-   `git-workflow-and-versioning`.
-9. **PULL REQUEST** — Submit; address feedback; obtain approval. Delegate to: `reviewer`.
-
----
-
-## 11. Definition of Done (DoD) Protocol
-
-No task is "Finished" until ALL checks pass.
-
-### Mandatory Checks
-
-1. **Tests Validated**
-   ```bash
-   pytest --cov=app --cov-report=term-missing      # backend
-   npm test                                          # frontend (Phase 2+)
-   ```
-   - [ ] All tests pass
-   - [ ] Coverage meets threshold (>80% for changed code)
-   - [ ] No new warnings
-
-2. **Quality Gates Pass**
-   ```bash
-   ruff check .                # lint
-   ruff format --check .       # format
-   mypy .                      # types (strict)
-   npm run lint && npx tsc --noEmit   # frontend (Phase 2+)
-   ```
-   - [ ] Linting passes
-   - [ ] Type checking passes
-   - [ ] Formatting correct
-
-3. **Documentation Updated**
-   - [ ] `README.md` for user-facing changes
-   - [ ] Docstrings for new functions/modules
-   - [ ] `KNOWLEDGE.md` with lessons learned
-   - [ ] ADR for any architectural decision
-
-4. **Review Completed**
-   - [ ] Code reviewed by at least one subagent
-   - [ ] QA verified coverage
-   - [ ] SRE reviewed ops impact (for infra/deploy changes)
-
----
-
-## 12. Team Lead Agent — Delegation & Responsibilities
-
-The Team Lead coordinates the workflow and delegates to specialized agents.
-
-### Delegation Triggers
-
-| Task | Delegate To |
-| --- | --- |
-| Requirements clarification | `analyst` skill |
-| Architecture / design decision | `system-architect` agent + ADR |
-| Code review needed | `code-review-and-quality` skill |
-| Tests needed | `test-driven-development` skill |
-| Security review | `security-and-hardening` skill |
-| Planning / breakdown | `planning-and-task-breakdown` skill |
-| Debug an issue | `debugging-and-error-recovery` skill |
-| Deploy / ship | `shipping-and-launch` skill |
-| Wrap up a task | `wrap_up_task` skill |
-
-### Autonomous Actions (no human approval needed)
-- Call a subagent for code review.
-- Request QA validation.
-- Move IMPLEMENTATION → REVIEW when tests pass.
-- Fix bugs and iterate through phases.
-- Make architectural decisions within existing patterns (no new ADR needed).
-- Commit and create PRs when all checks pass.
-
-### Requires Human Approval
-- [ ] Architecture changes requiring a new ADR (e.g., switching matching solver, DB engine).
-- [ ] Deprecation of existing features (e.g., retiring the legacy CLI).
-- [ ] Release/deploy to production.
-- [ ] Changes affecting external APIs (REST contract changes per §9 of the requirements doc).
-- [ ] Security policy changes (auth flow, RBAC model, rate limits).
-- [ ] Database schema changes (DynamoDB table/GSI changes).
-
----
-
-## 13. Anti-Rationalization
-
-Ignore these incorrect thoughts; follow the correct behavior instead.
-
-| Incorrect Thought | Correct Behavior |
-| --- | --- |
-| "This is too small for a skill." | Always check for and use a skill first. |
-| "I can just quickly implement this." | Plan first; write tests first. |
-| "I'll gather context first" (endlessly). | Time-box exploration; then act. |
-| "The spec will slow us down." | Spec before code for non-trivial work. |
-| "I know what to do, no need for planning." | Use `planning-and-task-breakdown`. |
-| "I'll skip tests, they slow me down." | TDD is mandatory for logic changes. |
-| "Documentation can wait until later." | Update docs/ADR in the DOCUMENTATION phase. |
-| "I told the other agent verbally." | Record handoffs in `KNOWLEDGE.md` / PR. |
-| "They can check the code." | Document rationale explicitly. |
-| "I'll remember to update docs later." | Update them now, in phase 7. |
-| "Legacy `src/main.py` is fine as-is." | New code follows the `app/` layout + ruff/mypy/pytest. |
-
----
-
-## 14. Skills Reference
-
-Skills live globally in `~/.config/kilo/skills/` and project-locally in `.kilo/skills/`
-(project-local overrides win). Invoke via the `skill` tool.
-
-### Core Workflow Skills (7)
-The backbone of the development lifecycle.
-
-| Skill | Purpose |
-| --- | --- |
-| `spec-driven-development` | Create specs before coding; resolve ambiguity up front. |
-| `planning-and-task-breakdown` | Break work into ordered, implementable tasks; estimate scope. |
-| `incremental-implementation` | Deliver multi-file changes in small, verifiable increments. |
-| `test-driven-development` | Drive implementation with failing tests first. |
-| `code-review-and-quality` | Multi-axis review before merge. |
-| `git-workflow-and-versioning` | Branching, committing, conflict resolution, versioning. |
-| `documentation-and-adrs` | Record decisions, ADRs, and docs. |
-
-### Composite / Meta Skills (2)
-| Skill | Purpose |
-| --- | --- |
-| `using-agent-skills` | Discover which skill applies to the current task (meta-skill). |
-| `wrap_up_task` | Final checks, reflection, logging, and documentation for a completed task. |
-
-### Specialized Skills (24)
-| Skill | Purpose |
-| --- | --- |
-| `analyst` | Gather/clarify requirements; translate needs into specifications. |
-| `api-and-interface-design` | Design stable APIs, module boundaries, REST/GraphQL contracts. |
-| `browser-testing-with-devtools` | Test in real browsers via Chrome DevTools (frontend). |
-| `ci-cd-and-automation` | Set up/modify build & deploy pipelines, quality gates. |
-| `code-simplification` | Refactor for clarity without changing behavior. |
-| `collaboration-protocol` | Standardized subagent collaboration and state sharing. |
-| `context-engineering` | Optimize agent context, rules files, session setup. |
-| `debugging-and-error-recovery` | Systematic root-cause debugging. |
-| `deprecation-and-migration` | Sunset old systems; migrate users safely. |
-| `devops` | CI/CD, deployment automation, IaC (Docker/Kubernetes/AWS). |
-| `frontend-ui-engineering` | Build production-quality UIs (Next.js/React). |
-| `idea-refine` | Refine ideas via structured divergent/convergent thinking. |
-| `kilo-config` | Kilo configuration (project-local builtin for this repo). |
-| `performance-optimization` | Profile and fix performance bottlenecks; Core Web Vitals. |
-| `programmer` | Implement features; write clean, standard-compliant code. |
-| `quality-assurance` | Design test strategies; create test plans; ensure quality. |
-| `reviewer` | Review PRs; provide code feedback; ensure quality. |
-| `security` | Security by design; identify vulnerabilities; implement controls. |
-| `security-and-hardening` | Harden code handling untrusted input, auth, sessions, integrations. |
-| `shipping-and-launch` | Pre-launch checklist, monitoring, staged rollout, rollback. |
-| `source-driven-development` | Ground decisions in official documentation. |
-| `sre` | Reliability, incidents, observability, on-call, monitoring. |
-| `system-architect` | System architecture, technology decisions, technical direction. |
-| `tech-lead` | Code-quality standards, architecture decisions, mentoring. |
-
-### Agent Personas (Global)
-- **Team Lead** — orchestrates the 9-phase workflow, delegates to subagents, enforces quality
-  gates. (Defined in the global agent configuration; see §12.)
-- **Subagent types** available via the `task` tool: `explore` (fast codebase search),
-  `general` (multi-step research/execution), `security-auditor` (vulnerability-focused review),
-  `team-lead` (coordination/delegation).
-
-### Project Agent Roles
-*None defined yet in `.kilo/agent/`.* As the project matures, add project-specific agent roles
-here (e.g., `matching-engine-dev`, `frontend-dev`, `infra-dev`). Place their definitions in
-`.kilo/agent/*.md`. Project-local agents override global ones of the same name.
-
-### Project-Specific References
-*None in `.kilo/skills/` yet.* The project's own reference material lives in:
-- `docs/functional_requirements_and_architecture.md` — master spec (FR-1..FR-11, RBAC, data model, API).
-- `plans/phase-{1..6}-*.md` — phased implementation plans.
-- `docs/requirements_baseline.md`, `docs/rbac_matrix.md`, `docs/data_model_erd.md`,
-  `docs/api_contracts.md`, `docs/diagrams/`, `docs/wireframes/` — Phase 1 deliverables (as produced).
-- `docs/adr/` — Architecture Decision Records.
-- `KNOWLEDGE.md` — lessons learned (created on first task wrap-up).
-
----
-
-## 15. Verification Commands
-
-**Every change must pass these before being marked done.** Backend commands run from repo root
-(or `app/` once bootstrapped); frontend commands run from the frontend project root (Phase 2+).
-
-```bash
-# Backend
-pytest                                    # tests
-ruff check .                              # lint
-ruff format --check .                     # format
-mypy .                                    # types (strict)
-
-# Frontend (Phase 2+)
-npm run lint                              # eslint
-npx tsc --noEmit                          # type check
-```
-
-If a command is not yet configured for the area you're touching (e.g., frontend not bootstrapped),
-note it explicitly in the PR and skip only with justification — do not silently skip.
-
----
-
-## 16. Completion Criteria
-
-A task is complete only when ALL of the following are true:
-
-- [ ] All tests pass (`pytest` / `npm test`).
-- [ ] Type check passes (`mypy .` / `tsc --noEmit`).
-- [ ] Lint passes (`ruff check .` / `npm run lint`).
-- [ ] Format check passes (`ruff format --check .`).
-- [ ] Coverage on changed code ≥ 80%.
-- [ ] `KNOWLEDGE.md` updated with lessons learned (if any).
-- [ ] Code reviewed by at least one subagent.
-- [ ] Documentation updated (README, docstrings, API docs as relevant).
-- [ ] ADR written for any architectural decision.
-- [ ] Change committed with a descriptive message.
-- [ ] Pull request created and linked to the relevant FR/phase task.
-
----
-
-## 17. Knowledge Base
-
-- **`KNOWLEDGE.md`** (repo root) — running log of lessons learned, gotchas, and decisions. Update
-  in the DOCUMENTATION phase of every task.
-- **`docs/adr/`** — Architecture Decision Records. Filename: `NNNN-short-title.md`. Template:
-  `docs/adr/0000-template.md` (create on first ADR). Every ADR records context, decision,
-  alternatives considered, and consequences.
-
----
-
-## 18. Configuration
-
-Runtime/configuration knobs for the platform (values set via environment / AWS Parameter Store,
-not hardcoded):
-
-| Setting | Default / Spec | Notes |
+| Setting | Project default / decision | Notes |
 | --- | --- | --- |
-| Geocoding provider | Nominatim (public, cached) | FR-5; dev/staging fixtures by default and production-wide 1 req/s limit. |
-| Routing provider | OpenRouteService (hosted) | FR-5; `/v2/directions` and `/v2/matrix`; cache results and enforce shared provider quotas. |
-| Matching algorithm | Greedy heuristic (MVP) | FR-6; OR-Tools/LP for production (>300 users). |
-| Matching problem | CVRPTW | Capacitated Vehicle Routing Problem with Time Windows. |
-| Rate limit (per IP) | 60 req/min | §14 of requirements doc. |
-| Rate limit (per user) | 120 req/min | §14 of requirements doc. |
-| Lambda runtime | Python 3.12, ARM64, 256 MB, 5–10s timeout | §10 of requirements doc. |
-| Large-session async | SQS / Step Functions / Fargate | For sessions > 300 users (§13). |
-| DynamoDB tables | `app_data` (single-table) + `session_cache`, `rate_limit_cache`, `brute_force_counter` | §10; TTL on cache/rate-limit tables. |
-| Auth | Google OIDC + session code | FR-1; session code = registration invite only. |
-| Notifications | Email via SQS → email Lambda → M365 Exchange | FR-10. |
-| Log retention | CloudWatch → S3 (30-day lifecycle) → Athena | §10. |
-| Edge / CDN | Cloudflare Free | §9 architecture. |
+| Geocoding | Cached Nominatim | Dev/staging use deterministic fixtures; production enforces a shared 1 request/second limit. |
+| Routing | Hosted OpenRouteService | Use `/v2/directions` and `/v2/matrix`; cache results and enforce shared provider quotas. |
+| Matching | Greedy heuristic MVP | OR-Tools/LP is a future option for larger sessions; do not change solvers without an architecture decision. |
+| Matching model | CVRPTW | Capacitated Vehicle Routing Problem with Time Windows. |
+| Rate limits | 60 requests/minute per IP; 120/minute per user | See the master specification and current implementation. |
+| Lambda | Python 3.12, ARM64, 256 MB, 5–10 second timeout | Follow the deployed environment's approved settings. |
+| Large sessions | SQS / Step Functions / Fargate | For sessions over 300 users, per the architecture plan. |
+| Data stores | `app_data`, `session_cache`, `rate_limit_cache`, `brute_force_counter`, plus model-defined tables | Consult the current ERD, Terraform, and ADRs; do not infer schema changes from this summary. |
+| Authentication | Google OIDC plus app session JWT | Session code is a registration invite, not an authentication credential. |
+| Notifications | SQS → email Lambda → M365 Exchange | See ADR-0008 and the current phase plan. |
+| Logs | CloudWatch → S3 with 30-day lifecycle → Athena | See the master specification and infrastructure plan. |
+| Edge/CDN | Cloudflare Pages and Free tier edge/WAF | Only the API proxy function should handle `/api/*`. |
 | AWS region | `us-east-2` | See ADR-0003. |
 
----
+If this summary conflicts with a current accepted ADR, specification, or deployed configuration,
+surface the discrepancy and use the authoritative source rather than silently changing behavior.
 
-## 19. Contact / Support
+## 16. Reference Documents
 
-- **Architecture & requirements:** [`docs/functional_requirements_and_architecture.md`](docs/functional_requirements_and_architecture.md)
-- **Phase plans:** [`plans/`](plans/)
-- **README:** [`README.md`](README.md)
-- **Repository:** https://github.com/timycyip/carpool-coordinator
+- Master requirements and architecture: `docs/functional_requirements_and_architecture.md`
+- Phase and task plans: `doc/plans/`
+- Requirements baseline: `docs/requirements_baseline.md`
+- API contracts: `docs/api_contracts.md`
+- Data model: `docs/data_model_erd.md` and `docs/database_design.md`
+- RBAC: `docs/rbac_matrix.md`
+- ADRs: `docs/adr/`
+- Knowledge base: `KNOWLEDGE.md`
+- Setup and commands: `README.md`
