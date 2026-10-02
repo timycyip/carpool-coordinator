@@ -7,7 +7,7 @@ by uvicorn for local development and by TestClient in tests.
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 
@@ -16,11 +16,13 @@ from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.sessions import router as sessions_router
+from app.middleware.rate_limit import rate_limit_dependency
 
 app = FastAPI(
     title="Carpool Coordinator",
     version="0.1.0",
     description="Carpool coordination platform for events.",
+    dependencies=[Depends(rate_limit_dependency)],
 )
 app.include_router(auth_router)
 app.include_router(health_router)
@@ -47,7 +49,11 @@ async def _envelope_http_exception(
         and set(detail.keys()) == {"error"}
         and isinstance(detail["error"], dict)
     ):
-        return JSONResponse(status_code=exc.status_code, content=detail)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=detail,
+            headers=exc.headers,
+        )
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": detail},

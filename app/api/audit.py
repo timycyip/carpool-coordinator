@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.config import app_data_table_name
 from app.db import get_ddb_client
@@ -39,7 +39,10 @@ def _parse_date(value: str, field: str) -> date:
     try:
         return date.fromisoformat(value)
     except ValueError as exc:
-        raise ValueError(f"{field} must be ISO-8601 date (YYYY-MM-DD): {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field} must be ISO-8601 date (YYYY-MM-DD).",
+        ) from exc
 
 
 def _to_iso(dt: datetime) -> str:
@@ -114,9 +117,9 @@ async def list_audit_events(
     filters = _build_filters(event_type, session_code)
 
     items: list[AuditEvent] = []
+    item_sks: list[str] = []
     next_cursor: str | None = None
     skipped_cursor = cursor is None
-    last_sk: str | None = None
 
     for d in _iter_dates(start_date, end_date):
         date_str = d.isoformat()
@@ -128,13 +131,11 @@ async def list_audit_events(
                     skipped_cursor = True
                 continue
             items.append(_event_from_item(raw))
-            last_sk = sk
-            if len(items) >= limit:
-                index_in_day = raw_items.index(raw)
-                if index_in_day + 1 < len(raw_items):
-                    next_cursor = last_sk
+            item_sks.append(sk)
+            if len(items) > limit:
+                next_cursor = item_sks[limit - 1]
                 break
-        if len(items) >= limit:
+        if len(items) > limit:
             break
 
     return PaginatedResponse[AuditEvent](

@@ -27,10 +27,10 @@ export default function Home() {
           Ready to coordinate your next carpool.
         </p>
         <Link
-          href="/dashboard"
+          href="/register"
           className="mt-6 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
         >
-          Go to dashboard
+          Join a session
         </Link>
       </main>
     );

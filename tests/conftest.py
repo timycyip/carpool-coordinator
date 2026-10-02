@@ -6,13 +6,16 @@ import pytest
 from fastapi.testclient import TestClient
 from moto import mock_aws
 
+from app.db import get_ddb_client
 from app.main import app
 
 
 @pytest.fixture()
-def client() -> Generator[TestClient, None, None]:
+def client(ddb_client: Any) -> Generator[TestClient, None, None]:
+    app.dependency_overrides[get_ddb_client] = lambda: ddb_client
     with TestClient(app) as c:
         yield c
+    app.dependency_overrides.clear()
 
 
 def _create_app_data_table(client: Any) -> None:

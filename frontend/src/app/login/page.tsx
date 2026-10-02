@@ -25,7 +25,7 @@ export default function LoginPage() {
       setIsSubmitting(true);
       try {
         await login(idToken);
-        router.push("/dashboard");
+        router.push("/");
       } catch (err) {
         const message =
           err instanceof Error

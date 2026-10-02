@@ -16,9 +16,9 @@ export async function onRequest({ request, env }: PagesContext): Promise<Respons
     });
   }
 
-  // The deployment policy sends master to staging and all other branches to dev.
+  // The Pages workflow deploys master as the Pages branch "staging".
   const originValue =
-    env.CF_PAGES_BRANCH === "master"
+    env.CF_PAGES_BRANCH === "master" || env.CF_PAGES_BRANCH === "staging"
       ? env.STAGING_API_ORIGIN
       : env.DEV_API_ORIGIN;
   if (!originValue) {

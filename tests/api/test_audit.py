@@ -6,6 +6,7 @@ writes) live in ``tests/middleware/test_audit.py``.
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 
 import boto3
@@ -83,6 +84,19 @@ def _seed_audit_items(client: Any) -> None:
                 "details": {"field": "status"},
             },
         )
+        await repo_write(
+            "2026-06-25",
+            "evt-004",
+            {
+                "event_id": "evt-004",
+                "timestamp": "2026-06-25T09:00:00+00:00",
+                "actor_sub": "user-3",
+                "event_type": "auth.login.success",
+                "session_code": None,
+                "ip_address": "3.3.3.3",
+                "details": {"method": "google"},
+            },
+        )
 
     import asyncio
 
@@ -116,27 +130,13 @@ def _seed_many_audit_items(client: Any) -> None:
 
 
 @pytest.fixture()
-def audit_client() -> Any:
+def audit_client(ddb_client: Any) -> Generator[TestClient, None, None]:
     """TestClient backed by moto-mocked DynamoDB with audit items seeded."""
-    with mock_aws():
-        ddb = boto3.client("dynamodb", region_name="us-east-2")
-        ddb.create_table(
-            TableName="app_data",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        _seed_audit_items(ddb)
-        app.dependency_overrides[get_ddb_client] = lambda: ddb
-        with TestClient(app) as client:
-            yield client
-        app.dependency_overrides.clear()
+    _seed_audit_items(ddb_client)
+    app.dependency_overrides[get_ddb_client] = lambda: ddb_client
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
 
 
 def test_unauthenticated_returns_401(audit_client: TestClient) -> None:
@@ -230,30 +230,25 @@ def test_get_audit_date_range(audit_client: TestClient) -> None:
     assert len(response.json()["items"]) == 3
 
 
-def test_get_audit_empty_when_no_events() -> None:
-    with mock_aws():
-        ddb = boto3.client("dynamodb", region_name="us-east-2")
-        ddb.create_table(
-            TableName="app_data",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
+def test_invalid_audit_date_returns_client_error(audit_client: TestClient) -> None:
+    response = audit_client.get(
+        "/audit",
+        params={"from": "not-a-date"},
+        headers=_auth(_make_token()),
+    )
+    assert response.status_code == 400
+
+
+def test_get_audit_empty_when_no_events(ddb_client: Any) -> None:
+    app.dependency_overrides[get_ddb_client] = lambda: ddb_client
+    with TestClient(app) as client:
+        token = _make_token()
+        response = client.get(
+            "/audit",
+            params={"from": "2026-06-24", "to": "2026-06-24"},
+            headers=_auth(token),
         )
-        app.dependency_overrides[get_ddb_client] = lambda: ddb
-        with TestClient(app) as client:
-            token = _make_token()
-            response = client.get(
-                "/audit",
-                params={"from": "2026-06-24", "to": "2026-06-24"},
-                headers=_auth(token),
-            )
-        app.dependency_overrides.clear()
+    app.dependency_overrides.clear()
 
     assert response.status_code == 200
     body = response.json()
@@ -300,6 +295,18 @@ def test_pagination_cursor_returns_next_page_without_skipping() -> None:
         ddb = boto3.client("dynamodb", region_name="us-east-2")
         ddb.create_table(
             TableName="app_data",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        ddb.create_table(
+            TableName="rate_limit_cache",
             KeySchema=[
                 {"AttributeName": "PK", "KeyType": "HASH"},
                 {"AttributeName": "SK", "KeyType": "RANGE"},
@@ -368,3 +375,26 @@ def test_pagination_cursor_returns_next_page_without_skipping() -> None:
             assert len(set(event_ids)) == 5, f"Duplicate items found: {event_ids}"
 
         app.dependency_overrides.clear()
+
+
+def test_pagination_cursor_continues_into_later_date_partition(
+    audit_client: TestClient,
+) -> None:
+    token = _make_token()
+    params = {"from": "2026-06-24", "to": "2026-06-25", "limit": 3}
+
+    first_page = audit_client.get("/audit", params=params, headers=_auth(token))
+    assert first_page.status_code == 200
+    first_body = first_page.json()
+    assert len(first_body["items"]) == 3
+    assert first_body["next_cursor"] is not None
+
+    second_page = audit_client.get(
+        "/audit",
+        params={**params, "cursor": first_body["next_cursor"]},
+        headers=_auth(token),
+    )
+    assert second_page.status_code == 200
+    second_body = second_page.json()
+    assert [item["event_id"] for item in second_body["items"]] == ["evt-004"]
+    assert second_body["next_cursor"] is None
